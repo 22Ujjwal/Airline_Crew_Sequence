@@ -257,7 +257,7 @@ with tab_dash:
             margin=dict(l=10, r=80, t=40, b=40),
             plot_bgcolor="white",
         )
-        st.plotly_chart(fig_bar, use_container_width=True)
+        st.plotly_chart(fig_bar, width='stretch')
 
     with col_tbl:
         st.subheader("Risk Table")
@@ -266,7 +266,7 @@ with tab_dash:
         display.columns = ["Origin", "Dest", "Month", "Model Risk", "Observed Bad %", "N Sequences"]
         display["Model Risk"] = display["Model Risk"].map("{:.1%}".format)
         display["Observed Bad %"] = display["Observed Bad %"].map("{:.1%}".format)
-        st.dataframe(display, use_container_width=True, height=420)
+        st.dataframe(display, width='stretch', height=420)
 
     st.divider()
 
@@ -292,7 +292,7 @@ with tab_dash:
         title="Average Risk Score by Origin Airport × Month",
     )
     fig_heat.update_layout(height=420, margin=dict(t=40, b=40))
-    st.plotly_chart(fig_heat, use_container_width=True)
+    st.plotly_chart(fig_heat, width='stretch')
 
 
 # ── Shared helper ────────────────────────────────────────────────────────────
@@ -335,7 +335,7 @@ def _render_sequences(seqs: pd.DataFrame, date_label: str, dep_col: str | None =
             str(row.get("Risk Level", "")), "")
         return [f"background-color:{c}" for _ in row]
 
-    st.dataframe(disp.style.apply(_color, axis=1), use_container_width=True, height=400)
+    st.dataframe(disp.style.apply(_color, axis=1), width='stretch', height=400)
     st.download_button("Download CSV", disp.to_csv(index=False),
                        file_name=f"dfw_risk_{date_label[:10]}.csv", mime="text/csv",
                        key=f"dl_{key_suffix}")
@@ -370,7 +370,7 @@ def _render_sequences(seqs: pd.DataFrame, date_label: str, dep_col: str | None =
     fig_tl.update_layout(xaxis=x_axis,
                           yaxis=dict(title="Risk Score", range=[-0.05,1.05], tickformat=".0%"),
                           height=360, plot_bgcolor="white", showlegend=False)
-    st.plotly_chart(fig_tl, use_container_width=True)
+    st.plotly_chart(fig_tl, width='stretch')
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -452,13 +452,13 @@ with tab_sched:
                         if not arr_df.empty:
                             st.dataframe(arr_df[["flight","airport","time_str"]].rename(
                                 columns={"flight":"Flight","airport":"From","time_str":"Time"}),
-                                use_container_width=True, height=260)
+                                width='stretch', height=260)
                     with c2:
                         st.markdown("**DFW → departures**")
                         if not dep_df.empty:
                             st.dataframe(dep_df[["flight","airport","time_str"]].rename(
                                 columns={"flight":"Flight","airport":"To","time_str":"Time"}),
-                                use_container_width=True, height=260)
+                                width='stretch', height=260)
 
                 # Build seqs from live data — vectorized cross-join
                 from datetime import datetime as _dt
@@ -723,7 +723,7 @@ with tab_optim:
                             return [f"background-color:{c}" for _ in row]
 
                         st.dataframe(disp_r.style.apply(_cr, axis=1),
-                                     use_container_width=True, height=420)
+                                     width='stretch', height=420)
                         st.download_button("Download Optimal Schedule",
                                            disp_r.to_csv(index=False),
                                            file_name=f"optimal_sequences_{opt_source_label}.csv",
@@ -742,7 +742,7 @@ with tab_optim:
                         ))
                         fig_pie.update_layout(title="Assigned Sequences by Risk Level",
                                                height=280, margin=dict(t=40,b=0,l=0,r=0))
-                        st.plotly_chart(fig_pie, use_container_width=True)
+                        st.plotly_chart(fig_pie, width='stretch')
 
                     # Optimal vs worst bar
                     fig_cmp = go.Figure([
@@ -757,7 +757,7 @@ with tab_optim:
                         margin=dict(t=40,b=40,l=40,r=20),
                         legend=dict(orientation="h", y=-0.2),
                     )
-                    st.plotly_chart(fig_cmp, use_container_width=True)
+                    st.plotly_chart(fig_cmp, width='stretch')
 
                 # ── Gantt-style timeline ──────────────────────────────────
                 if not result_df.empty:
@@ -799,7 +799,7 @@ with tab_optim:
                         title="Each bar = one A→DFW→B sequence (color = risk level)",
                         margin=dict(l=80, r=80, t=50, b=50),
                     )
-                    st.plotly_chart(fig_g, use_container_width=True)
+                    st.plotly_chart(fig_g, width='stretch')
 
 
 # ═══════════════════════════════════════════════════════════════════════════
@@ -857,7 +857,7 @@ with tab_query:
                 st.plotly_chart(
                     gauge_chart(result["risk_score"],
                                 f"{airport_a} → DFW → {airport_b}"),
-                    use_container_width=True,
+                    width='stretch',
                 )
 
                 # Key metrics
@@ -913,7 +913,7 @@ with tab_query:
                     feat_vals = feat_vals.dropna()
                     st.dataframe(feat_vals.style.format("{:.4f}"), height=350)
                 else:
-                    st.plotly_chart(shap_bar_chart(shap_result), use_container_width=True)
+                    st.plotly_chart(shap_bar_chart(shap_result), width='stretch')
 
         st.divider()
 
@@ -955,7 +955,7 @@ with tab_query:
             fig_monthly.add_vline(x=q_month, line_dash="dot", line_color="#333",
                                   annotation_text=ap_meta.MONTH_NAMES[q_month][:3],
                                   annotation_position="top")
-        st.plotly_chart(fig_monthly, use_container_width=True)
+        st.plotly_chart(fig_monthly, width='stretch')
 
         # Compare with reversed sequence
         with st.expander("Compare: reversed sequence B → DFW → A"):
@@ -966,13 +966,13 @@ with tab_query:
                     st.plotly_chart(
                         gauge_chart(result["risk_score"] if result else 0,
                                     f"{airport_a}→DFW→{airport_b}"),
-                        use_container_width=True
+                        width='stretch'
                     )
                 with col_rev2:
                     st.plotly_chart(
                         gauge_chart(result_rev["risk_score"],
                                     f"{airport_b}→DFW→{airport_a}"),
-                        use_container_width=True
+                        width='stretch'
                     )
             else:
                 st.info(f"No data for {airport_b} → DFW → {airport_a} in month {q_month}.")
@@ -1073,11 +1073,11 @@ with tab_map:
         margin=dict(t=40, b=0, l=0, r=0),
         legend=dict(yanchor="bottom", y=0.01, xanchor="left", x=0.01),
     )
-    st.plotly_chart(fig_map, use_container_width=True)
+    st.plotly_chart(fig_map, width='stretch')
 
     # Table below map
     st.subheader(f"Top {map_top_n} Airports by Risk ({ap_meta.MONTH_NAMES[map_month]})")
     tbl = grp[["airport", "city", "state", "avg_risk", "n_pairs", "worst_partner"]].copy()
     tbl.columns = ["Airport", "City", "State", "Avg Risk", "N Pairs", "Worst Partner"]
     tbl["Avg Risk"] = tbl["Avg Risk"].map("{:.1%}".format)
-    st.dataframe(tbl, use_container_width=True, height=320)
+    st.dataframe(tbl, width='stretch', height=320)
