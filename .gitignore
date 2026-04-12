@@ -43,7 +43,7 @@ Thumbs.db
 
 # ── Processed: large intermediates not needed by app at runtime ───────────────
 data/processed/sequence_features_duty.parquet
-data/processed/app_features_cache.parquet
+data/processed/sequence_features.parquet
 data/processed/pair_scores_with_significance.parquet
 data/processed/weather_benchmarked_pairs.parquet
 data/processed/monthly_weather_2024.parquet
