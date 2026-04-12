@@ -29,15 +29,38 @@ TURNAROUND_MIN_HRS = 0.5           # min turnaround (shorter = invalid / not a r
 # ---------------------------------------------------------------------------
 
 def load_raw() -> pd.DataFrame:
-    files = [
+    # Prefer all-carrier files over AA-only; fall back to AA-only if not present
+    all_files = sorted([
+        os.path.join(RAW_DIR, f)
+        for f in os.listdir(RAW_DIR)
+        if f.startswith("bts_all_dfw_") and f.endswith(".parquet")
+    ])
+    aa_files = sorted([
         os.path.join(RAW_DIR, f)
         for f in os.listdir(RAW_DIR)
         if f.startswith("bts_aa_dfw_") and f.endswith(".parquet")
-    ]
+    ])
+
+    # For each year use all-carrier if available, else AA-only
+    year_file = {}
+    for f in aa_files:
+        yr = f.split("_")[-1].replace(".parquet", "")
+        year_file[yr] = f
+    for f in all_files:
+        yr = f.split("_")[-1].replace(".parquet", "")
+        year_file[yr] = f  # overrides AA-only
+
+    files = list(year_file.values())
     if not files:
         raise FileNotFoundError(f"No BTS parquet files found in {RAW_DIR}. Run download_bts.py first.")
+    print(f"Using files: {[os.path.basename(f) for f in sorted(files)]}")
 
-    df = pd.concat([pd.read_parquet(f) for f in sorted(files)], ignore_index=True)
+    # Load year-by-year and aggregate airport features to avoid OOM
+    frames = []
+    for f in sorted(files):
+        frames.append(pd.read_parquet(f))
+    df = pd.concat(frames, ignore_index=True)
+    del frames
     df["FlightDate"] = pd.to_datetime(df["FlightDate"])
     df["Month"] = df["FlightDate"].dt.month
     df["Year"] = df["FlightDate"].dt.year
@@ -261,7 +284,7 @@ FEATURE_COLS = [
 ]
 
 
-def save_features(pairs: pd.DataFrame):
+def save_features(pairs: pd.DataFrame, year: int = None):
     """
     Aggregate flight-level pairs to (airport_A, airport_B, Month, Year).
     This is the right unit of analysis: we want to score pair × month combos,
@@ -306,16 +329,11 @@ def save_features(pairs: pd.DataFrame):
         .reset_index()
     )
 
-    # Binary target: pair×month is "high risk" if observed bad rate > median
+    grouped["Month"] = grouped["Month"].astype(int)
+    # Provisional per-year threshold (will be re-set globally in main)
     threshold = grouped["observed_bad_rate"].median()
     grouped["target"] = (grouped["observed_bad_rate"] > threshold).astype(int)
-    grouped["Month"] = grouped["Month"].astype(int)
-
-    out_path = os.path.join(PROCESSED_DIR, "sequence_features.parquet")
-    grouped.to_parquet(out_path, index=False)
-    print(f"Aggregated to {len(grouped):,} pair×month rows (threshold bad_rate={threshold:.3f})")
-    print(f"High-risk rate: {grouped['target'].mean():.1%}")
-    print(f"Saved → {out_path}")
+    print(f"  {year or ''}: {len(grouped):,} pair×month rows  bad_rate threshold={threshold:.3f}  high-risk={grouped['target'].mean():.1%}")
     return grouped
 
 
@@ -323,20 +341,66 @@ def save_features(pairs: pd.DataFrame):
 # Main
 # ---------------------------------------------------------------------------
 
-def main():
-    # Build airport features from all years combined (needs full picture of each airport)
-    df_all = load_raw()
-    airport_features = build_airport_features(df_all)
-    airport_features.to_parquet(os.path.join(PROCESSED_DIR, "airport_features.parquet"), index=False)
-    del df_all  # free memory before the heavy sequence step
-
-    # Process sequences year-by-year to stay within memory limits
-    yearly_aggs = []
-    files = sorted([
+def _resolve_files() -> list[str]:
+    """Return best available file per year (all-carrier preferred over AA-only)."""
+    all_files = sorted([
+        os.path.join(RAW_DIR, f)
+        for f in os.listdir(RAW_DIR)
+        if f.startswith("bts_all_dfw_") and f.endswith(".parquet")
+    ])
+    aa_files = sorted([
         os.path.join(RAW_DIR, f)
         for f in os.listdir(RAW_DIR)
         if f.startswith("bts_aa_dfw_") and f.endswith(".parquet")
     ])
+    year_file = {}
+    for f in aa_files:
+        yr = f.split("_")[-1].replace(".parquet", "")
+        year_file[yr] = f
+    for f in all_files:
+        yr = f.split("_")[-1].replace(".parquet", "")
+        year_file[yr] = f
+    files = sorted(year_file.values())
+    print(f"Using files: {[os.path.basename(f) for f in files]}")
+    return files
+
+
+def main():
+    files = _resolve_files()
+
+    # Build airport features by streaming one year at a time, concat the small aggregates
+    print("\nBuilding airport features (streaming per year)...")
+    ap_agg_frames = []
+    for fpath in files:
+        df_yr = pd.read_parquet(fpath)
+        df_yr["FlightDate"] = pd.to_datetime(df_yr["FlightDate"])
+        df_yr["Month"] = df_yr["FlightDate"].dt.month
+        df_yr["Year"]  = df_yr["FlightDate"].dt.year
+        ap_agg_frames.append(build_airport_features(df_yr))
+        del df_yr
+
+    # Re-aggregate the per-year airport summaries into a single cross-year profile
+    ap_combined = pd.concat(ap_agg_frames, ignore_index=True)
+    del ap_agg_frames
+    airport_features = (
+        ap_combined.groupby(["airport", "Month"])
+        .mean(numeric_only=True)
+        .reset_index()
+    )
+    airport_features.to_parquet(os.path.join(PROCESSED_DIR, "airport_features.parquet"), index=False)
+    print(f"Airport features: {airport_features.shape}")
+    del ap_combined
+
+    # Sequences: use all-carrier files (broader training signal; airport risk is carrier-agnostic)
+    seq_files = sorted([
+        os.path.join(RAW_DIR, f)
+        for f in os.listdir(RAW_DIR)
+        if f.startswith("bts_all_dfw_") and f.endswith(".parquet")
+    ])
+    print(f"\nBuilding sequences from all-carrier files: {[os.path.basename(f) for f in seq_files]}")
+
+    yearly_aggs = []
+    files = seq_files
 
     for fpath in files:
         year = int(os.path.basename(fpath).split("_")[-1].replace(".parquet",""))
@@ -355,11 +419,18 @@ def main():
         seqs  = build_sequences(df_year)
         seqs  = build_feature_matrix(seqs, airport_features)
         seqs  = label_sequences(seqs)
-        yearly_aggs.append(seqs)
+        # Aggregate immediately per year to avoid accumulating flight-level DFs
+        yearly_aggs.append(save_features(seqs, year=year))
         del df_year, seqs
 
+    # Combine all per-year aggregates and re-label with a consistent threshold
     all_seqs = pd.concat(yearly_aggs, ignore_index=True)
-    save_features(all_seqs)
+    threshold = all_seqs["observed_bad_rate"].median()
+    all_seqs["target"] = (all_seqs["observed_bad_rate"] > threshold).astype(int)
+    out_path = os.path.join(PROCESSED_DIR, "sequence_features.parquet")
+    all_seqs.to_parquet(out_path, index=False)
+    print(f"\nFinal: {len(all_seqs):,} pair×month×year rows saved → {out_path}")
+    print(f"Global threshold: {threshold:.3f}  High-risk rate: {all_seqs['target'].mean():.1%}")
 
 
 if __name__ == "__main__":

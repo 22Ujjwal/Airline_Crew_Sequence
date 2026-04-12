@@ -1,5 +1,16 @@
-# Raw BTS flight data (large, re-downloadable)
-data/raw/
+# Raw BTS flight data — exclude large historical files, keep 2024 schedule for app
+data/raw/bts_all_dfw_2015.parquet
+data/raw/bts_all_dfw_2016.parquet
+data/raw/bts_all_dfw_2017.parquet
+data/raw/bts_all_dfw_2018.parquet
+data/raw/bts_all_dfw_2019.parquet
+data/raw/bts_all_dfw_2022.parquet
+data/raw/bts_all_dfw_2023.parquet
+data/raw/bts_aa_dfw_2018.parquet
+data/raw/bts_aa_dfw_2019.parquet
+data/raw/bts_aa_dfw_2022.parquet
+data/raw/bts_aa_dfw_2023.parquet
+data/raw/bts_aa_dfw_2024.parquet
 
 # Cached IEM weather downloads (re-downloadable)
 data/weather/
@@ -29,3 +40,32 @@ Thumbs.db
 # IDE
 .vscode/
 .idea/
+
+# ── Processed: large intermediates not needed by app at runtime ───────────────
+data/processed/sequence_features_duty.parquet
+data/processed/app_features_cache.parquet
+data/processed/pair_scores_with_significance.parquet
+data/processed/weather_benchmarked_pairs.parquet
+data/processed/monthly_weather_2024.parquet
+data/processed/monthly_weather_gsom.parquet
+
+# ── Model artifacts: only keep production XGBoost model ──────────────────────
+data/processed/lgbm_duty_model.txt
+data/processed/lgbm_tuned_model.txt
+data/processed/xgb_tuned_model.json
+data/processed/best_params_lgbm.json
+data/processed/best_params_xgb.json
+data/processed/model_snapshots/
+
+# ── Output artefacts (generated, not needed for app) ─────────────────────────
+data/processed/plots/
+data/processed/ood_comparison.png
+data/processed/ood_summary.csv
+data/processed/feature_importance.png
+
+# ── Claude internal memory ────────────────────────────────────────────────────
+memory/
+CLAUDE.md
+
+# ── Streamlit secrets (never commit) ─────────────────────────────────────────
+.streamlit/secrets.toml

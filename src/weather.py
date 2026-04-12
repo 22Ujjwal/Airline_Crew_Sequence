@@ -142,7 +142,7 @@ def aggregate_daily_weather(df: pd.DataFrame) -> pd.DataFrame:
         for sky_col, hgt_col in [("skyc1","skyl1"),("skyc2","skyl2")]:
             if sky_col in row and hgt_col in row:
                 if str(row[sky_col]) in ("BKN","OVC") and pd.notna(row[hgt_col]):
-                    return row[hgt_col] * 100  # IEM reports in hundreds of feet
+                    return row[hgt_col]  # IEM skyl1/skyl2 already in feet
         return np.nan
 
     if "skyc1" in df.columns:
@@ -183,6 +183,8 @@ def _compute_severity(df: pd.DataFrame) -> pd.Series:
     s += (vis < 1).astype(float) * 0.25
     s += ((vis >= 1) & (vis < 3)).astype(float) * 0.10
     wind = df.get("max_wind_kt", pd.Series(0.0, index=df.index)).fillna(0)
+    gust = df.get("max_gust_kt", pd.Series(0.0, index=df.index)).fillna(0)
+    wind = wind.combine(gust, max)  # use whichever is higher
     s += (wind > 30).astype(float) * 0.20
     s += ((wind > 20) & (wind <= 30)).astype(float) * 0.08
     return s.clip(0, 1)
@@ -236,16 +238,25 @@ def fetch_live_metar(iata_codes: list[str], hours: int = 2) -> dict[str, dict]:
 
 
 def _parse_awc_obs(obs: dict) -> dict:
+    # AWC API returns wx codes in "wxString" when present, otherwise parse rawOb
     wx_string = obs.get("wxString", "") or ""
-    sky       = obs.get("sky", []) or []
+    if not wx_string:
+        raw = obs.get("rawOb", "") or ""
+        # Extract weather group tokens from raw METAR (between vis and clouds)
+        import re
+        wx_tokens = re.findall(r'\b(TS|FG|BR|SN|FZRA|PL|DZ|RA|GR|GS|BLSN|FC|SS|DS)\b', raw)
+        wx_string = " ".join(wx_tokens)
+
+    # AWC API now uses "clouds" (base in feet), not "sky" (base in hundreds of feet)
+    clouds = obs.get("clouds", obs.get("sky", [])) or []
 
     # Ceiling: lowest BKN or OVC layer
     ceiling = np.nan
-    for layer in sky:
+    for layer in clouds:
         cover  = layer.get("cover", "")
         height = layer.get("base", None)
         if cover in ("BKN", "OVC") and height is not None:
-            ceiling = float(height) * 100  # hundreds of feet → feet
+            ceiling = float(height)  # already in feet
             break
 
     vis  = obs.get("visib", None)

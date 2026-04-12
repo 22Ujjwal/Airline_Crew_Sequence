@@ -55,7 +55,7 @@ def risk_label(score: float) -> tuple[str, str]:
 
 class PairRiskPredictor:
     def __init__(self):
-        self.model = xgb.XGBClassifier()
+        self.model = xgb.XGBClassifier(device="cuda", tree_method="hist")
         self.model.load_model(os.path.join(PROC, "xgb_model.json"))
         self.airport_features = pd.read_parquet(os.path.join(PROC, "airport_features.parquet"))
         self.pair_scores      = pd.read_parquet(os.path.join(PROC, "pair_risk_scores.parquet"))
