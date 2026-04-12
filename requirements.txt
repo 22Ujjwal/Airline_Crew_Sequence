@@ -13,5 +13,3 @@ plotly>=5.20
 shap>=0.44
 airportsdata>=20240101
 pytz>=2024.1
-lightgbm>=4.0
-optuna>=3.5
