@@ -195,12 +195,22 @@ HIGH_THRESHOLD = 0.30   # calibrated: ≥30% of sequences historically disrupted
 MOD_THRESHOLD  = 0.20   # calibrated: ≥20%
 
 
+_COLOR_CAP = 0.50  # calibrated scores rarely exceed 50%; maps to full red
+
 def score_to_color(score: float) -> str:
-    if score >= HIGH_THRESHOLD:
-        return "#d62728"
-    if score >= MOD_THRESHOLD:
-        return "#ff7f0e"
-    return "#2ca02c"
+    """Continuous green→yellow→red interpolation over the calibrated score range [0, 0.50]."""
+    t = max(0.0, min(1.0, score / _COLOR_CAP))
+    if t <= 0.5:
+        s = t * 2                          # 0→1 over bottom half
+        r = int(44  + s * (255 - 44))     # 44→255
+        g = int(160 + s * (200 - 160))    # 160→200
+        b = int(44  + s * (0   - 44))     # 44→0
+    else:
+        s = (t - 0.5) * 2                 # 0→1 over top half
+        r = int(255 + s * (214 - 255))    # 255→214
+        g = int(200 + s * (39  - 200))    # 200→39
+        b = int(0   + s * 40)             # 0→40
+    return f"rgb({r},{g},{b})"
 
 
 def gauge_chart(risk_score: float, title: str = "Risk Score") -> go.Figure:
