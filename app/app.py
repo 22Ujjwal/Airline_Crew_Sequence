@@ -288,24 +288,28 @@ enabling crew schedulers to:
     ]
 
     fig_pipe = go.Figure()
+    # Arrow lines (drawn first so boxes sit on top)
+    for x0, y0, x1, y1 in _arrows:
+        fig_pipe.add_trace(go.Scatter(
+            x=[x0, x1], y=[y0, y1], mode="lines+markers",
+            line=dict(color="rgba(160,160,160,0.65)", width=2),
+            marker=dict(
+                symbol=["circle", "triangle-right"], size=[1, 10],
+                color="rgba(160,160,160,0.65)",
+            ),
+            showlegend=False, hoverinfo="skip",
+        ))
+    # Boxes + labels (data coordinates, no xref/yref needed)
     for label, cx, cy, color in _nodes:
         fig_pipe.add_shape(type="rect",
-            xref="paper", yref="paper",
             x0=cx-0.11, y0=cy-0.17, x1=cx+0.11, y1=cy+0.17,
             fillcolor=color, opacity=0.88, line=dict(color="white", width=1.5))
         fig_pipe.add_annotation(
-            xref="paper", yref="paper", x=cx, y=cy,
-            text=label.replace("\n", "<br>"),
+            x=cx, y=cy, text=label.replace("\n", "<br>"),
             font=dict(color="white", size=10), showarrow=False, align="center")
-    for x0, y0, x1, y1 in _arrows:
-        fig_pipe.add_annotation(
-            xref="paper", yref="paper", axref="paper", ayref="paper",
-            x=x1, y=y1, ax=x0, ay=y0, text="",
-            showarrow=True, arrowhead=3, arrowsize=1.2,
-            arrowwidth=2, arrowcolor="rgba(160,160,160,0.65)")
     fig_pipe.update_layout(
-        xaxis=dict(visible=False, range=[0, 1]),
-        yaxis=dict(visible=False, range=[0, 1]),
+        xaxis=dict(visible=False, range=[-0.02, 1.02]),
+        yaxis=dict(visible=False, range=[0.08, 1.00]),
         height=240, margin=dict(t=10, b=10, l=10, r=10),
         plot_bgcolor="rgba(0,0,0,0)",
     )
