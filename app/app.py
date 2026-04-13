@@ -244,20 +244,40 @@ def gauge_chart(risk_score: float, title: str = "Risk Score") -> go.Figure:
 
 def shap_bar_chart(shap_df: pd.DataFrame) -> go.Figure:
     shap_df = shap_df.sort_values("shap_value")
+    imputed_col = "imputed" in shap_df.columns
     colors = ["#d62728" if v > 0 else "#2ca02c" for v in shap_df["shap_value"]]
+    # Imputed features get dashed border (rgba) to signal "estimated, not measured"
+    line_widths = []
+    line_colors = []
+    for _, row in shap_df.iterrows():
+        if imputed_col and row.get("imputed", False):
+            line_widths.append(2)
+            line_colors.append("rgba(180,130,0,0.9)")   # amber border = imputed
+        else:
+            line_widths.append(0)
+            line_colors.append("rgba(0,0,0,0)")
+    hover = [
+        (f"<b>%{{y}}</b><br>SHAP: %{{x:.4f}}<br>Value: %{{customdata:.3f}}"
+         + (" <i>(★ month-median imputed)</i>" if imputed_col and row.get("imputed", False) else "")
+         + "<extra></extra>")
+        for _, row in shap_df.iterrows()
+    ]
     fig = go.Figure(go.Bar(
         x=shap_df["shap_value"],
         y=shap_df["label"],
         orientation="h",
-        marker_color=colors,
+        marker=dict(
+            color=colors,
+            line=dict(width=line_widths, color=line_colors),
+        ),
         text=[f"{v:+.3f}" for v in shap_df["shap_value"]],
         textposition="outside",
-        hovertemplate="<b>%{y}</b><br>SHAP: %{x:.4f}<br>Value: %{customdata:.3f}<extra></extra>",
+        hovertemplate=hover[0] if len(set(hover)) == 1 else "%{y}: %{x:.4f}<extra></extra>",
         customdata=shap_df["feature_value"],
     ))
     fig.update_layout(
         title="Feature Contributions (SHAP Values)<br>"
-              "<sup>Red = increases risk | Green = decreases risk</sup>",
+              "<sup>Red = increases risk | Green = decreases risk | Amber border = GSOM median imputed</sup>",
         xaxis_title="SHAP Value (impact on model output)",
         height=max(350, len(shap_df) * 28),
         margin=dict(l=10, r=80, t=60, b=40),
@@ -900,9 +920,18 @@ capturing compounding effects (both airports simultaneously bad → highest risk
             """),
             ("GSOM Weather (NOAA)", "#1a7a4a", """
 **Source:** NOAA Global Summary of Month, downloaded via IEM API.
-**Coverage:** ~55% of US commercial airports have a nearby GSOM station with complete data.
-Missing values are left as NaN — XGBoost learns a default split direction for each feature,
-effectively learning "if GSOM is unavailable, use the BTS-based priors."
+**Coverage:** ~35% of unique origin airports (73/204) have a nearby GSOM station with
+complete data; ~55% of sequence rows lack A-side GSOM data.
+
+**Fairness fix — month-level median imputation.** Early versions left GSOM values as NaN,
+relying on XGBoost's NaN default branches. This created a subtle bias: the model learned that
+"no GSOM station" correlates with lower disruption rates (because GSOM-less airports tend to be
+smaller), causing airports like ANC (Anchorage) or ALB (Albany) to receive artificially low
+risk scores despite genuinely severe weather. The fix: at inference time, NaN GSOM features
+are replaced with the month-level population median computed from all airports that do have
+data. This gives uncovered airports a *neutral, seasonal* weather signal rather than
+conflating "no station" with "good weather." SHAP charts flag imputed features with ★ and
+an amber border.
 
 | Feature | Definition |
 |---|---|
@@ -1836,7 +1865,10 @@ with tab_query:
                 if shap_key not in st.session_state:
                     with st.spinner("Computing feature contributions (first time only)..."):
                         try:
-                            st.session_state[shap_key] = pred.explain_pair(result["X"], top_n=15)
+                            st.session_state[shap_key] = pred.explain_pair(
+                                result["X"], top_n=15,
+                                gsom_imputed=result.get("gsom_imputed", set()),
+                            )
                         except Exception as ex:
                             st.session_state[shap_key] = ex
                 shap_result = st.session_state[shap_key]
@@ -1855,6 +1887,16 @@ with tab_query:
                         " for this pair-month — features sorted by impact magnitude.",
                         unsafe_allow_html=True,
                     )
+                    _gsom_imp = result.get("gsom_imputed", set())
+                    if _gsom_imp:
+                        st.info(
+                            f"**★ GSOM weather features imputed** — {airport_a} or {airport_b} "
+                            f"lacks a nearby NOAA weather station. "
+                            f"{len(_gsom_imp)} feature(s) filled with the month-{q_month} population "
+                            f"median across all airports that do have GSOM data. "
+                            f"Starred (★) features in the chart used imputed values; their SHAP "
+                            f"contributions reflect *typical* weather for this month, not measured values."
+                        )
                     st.plotly_chart(shap_bar_chart(shap_result), width='stretch')
 
         st.divider()

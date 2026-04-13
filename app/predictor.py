@@ -34,6 +34,66 @@ else:
 HIGH_THRESHOLD = 0.30   # ≥30% of sequences historically disrupted
 MOD_THRESHOLD  = 0.20   # ≥20% of sequences historically disrupted
 
+# ── GSOM month-level median imputation ──────────────────────────────────────
+# Airports without a nearby NOAA GSOM station (~55% of DFW AA routes) have NaN
+# for all five climate features. XGBoost's NaN default branches learned that
+# "no GSOM station" correlates with lower disruption rates (because GSOM-less airports
+# tend to be smaller), creating a hidden bias. We fix this by substituting the
+# month-level population median — giving uncovered airports a neutral, seasonal
+# climate signal rather than letting the model infer risk from missingness alone.
+_gsom_med_path = os.path.join(PROCESSED, "gsom_month_medians.json")
+if os.path.exists(_gsom_med_path):
+    with open(_gsom_med_path) as _gf:
+        _GSOM_MEDIANS: dict[str, dict[int, float]] = {
+            k: {int(mk): mv for mk, mv in v.items()}
+            for k, v in _json.load(_gf).items()
+        }
+else:
+    _GSOM_MEDIANS = {}
+
+_GSOM_COLS_A    = ["A_avg_wind_speed", "A_precip_days", "A_extreme_precip",
+                   "A_total_precip", "A_max_wind_gust"]
+_GSOM_COLS_B    = ["B_avg_wind_speed", "B_precip_days", "B_extreme_precip",
+                   "B_total_precip", "B_max_wind_gust"]
+_GSOM_COLS_PAIR = ["pair_max_avg_wind_speed", "pair_max_precip_days",
+                   "pair_max_extreme_precip", "pair_max_total_precip", "pair_max_max_wind_gust"]
+_ALL_GSOM_COLS  = _GSOM_COLS_A + _GSOM_COLS_B + _GSOM_COLS_PAIR
+
+
+def _apply_gsom_imputation(X: pd.DataFrame, month: int) -> tuple[pd.DataFrame, set[str]]:
+    """
+    Fill NaN GSOM features with the month-level population median.
+    Returns (imputed_df, set_of_columns_that_were_imputed).
+    Pair-level max features are re-derived from the imputed A/B values so they
+    remain internally consistent.
+    """
+    if not _GSOM_MEDIANS:
+        return X, set()
+    X = X.copy()
+    imputed: set[str] = set()
+    for col in _ALL_GSOM_COLS:
+        if col not in X.columns:
+            continue
+        if X[col].isna().any() and col in _GSOM_MEDIANS:
+            fill_val = _GSOM_MEDIANS[col].get(month, np.nan)
+            if not np.isnan(fill_val):
+                X[col] = X[col].fillna(fill_val)
+                imputed.add(col)
+    # Re-derive pair-level max features to stay consistent
+    if "A_avg_wind_speed" in X.columns and "B_avg_wind_speed" in X.columns:
+        if "pair_max_avg_wind_speed" in X.columns:
+            X["pair_max_avg_wind_speed"] = X[["A_avg_wind_speed", "B_avg_wind_speed"]].max(axis=1)
+        if "pair_max_precip_days" in X.columns:
+            X["pair_max_precip_days"] = X[["A_precip_days", "B_precip_days"]].max(axis=1)
+        if "pair_max_extreme_precip" in X.columns:
+            X["pair_max_extreme_precip"] = X[["A_extreme_precip", "B_extreme_precip"]].max(axis=1)
+        if "pair_max_total_precip" in X.columns:
+            X["pair_max_total_precip"] = X[["A_total_precip", "B_total_precip"]].max(axis=1)
+        if "pair_max_max_wind_gust" in X.columns:
+            X["pair_max_max_wind_gust"] = X[["A_max_wind_gust", "B_max_wind_gust"]].max(axis=1)
+    return X, imputed
+
+
 FEATURE_COLS = [
     # Airport A BTS weather stats
     "A_weather_delay_rate", "A_weather_cancel_rate", "A_avg_weather_delay_min",
@@ -251,7 +311,8 @@ class RiskPredictor:
         row = row.copy()
         row["Month"] = month
 
-        X = row[self.feature_cols].to_frame().T.astype(float)
+        X_raw = row[self.feature_cols].to_frame().T.astype(float)
+        X, gsom_imputed = _apply_gsom_imputation(X_raw, month)
         prob_raw = float(self.model.predict_proba(X)[0, 1])
         prob = _calibrate(prob_raw)   # map to observed-bad-rate scale
 
@@ -262,22 +323,33 @@ class RiskPredictor:
             "observed_bad_rate": float(row.get("observed_bad_rate", np.nan)),
             "n_sequences": int(row.get("n_sequences", 0)),
             "X": X,
+            "X_raw": X_raw,
+            "gsom_imputed": gsom_imputed,   # set of column names that were filled
             "row": row,
         }
 
-    def explain_pair(self, X: pd.DataFrame, top_n: int = 15) -> pd.DataFrame:
-        """Return DataFrame of feature contributions sorted by |SHAP value|."""
+    def explain_pair(self, X: pd.DataFrame, top_n: int = 15,
+                     gsom_imputed: set[str] | None = None) -> pd.DataFrame:
+        """Return DataFrame of feature contributions sorted by |SHAP value|.
+        gsom_imputed: set of column names that were filled via median imputation.
+        """
         import shap
         shap_vals = self.explainer.shap_values(X)
         if isinstance(shap_vals, list):
             shap_vals = shap_vals[1]
         vals = shap_vals[0]
         feat_names = X.columns.tolist()
+        imputed_set = gsom_imputed or set()
         result = pd.DataFrame({
             "feature": feat_names,
             "shap_value": vals,
             "feature_value": X.iloc[0].values,
-            "label": [FEATURE_LABELS.get(f, f) for f in feat_names],
+            "label": [
+                (FEATURE_LABELS.get(f, f) + " ★")   # star = imputed
+                if f in imputed_set else FEATURE_LABELS.get(f, f)
+                for f in feat_names
+            ],
+            "imputed": [f in imputed_set for f in feat_names],
         })
         result["abs_shap"] = result["shap_value"].abs()
         return result.sort_values("abs_shap", ascending=False).head(top_n).reset_index(drop=True)
