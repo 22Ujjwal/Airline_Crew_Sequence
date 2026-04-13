@@ -274,6 +274,12 @@ with st.sidebar:
     else:
         st.info("No key → BTS 2024 analog used")
     st.divider()
+    try:
+        _default_dark = st.get_option("theme.base") != "light"
+    except Exception:
+        _default_dark = True
+    dark_mode = st.toggle("🌙 Dark mode", value=_default_dark, key="global_dark")
+    st.divider()
     st.caption("Data: BTS 2015–2024 · GSOM · FAA Part 117")
 
 
@@ -318,39 +324,40 @@ with tab_overview:
 
     # ── Pipeline Sankey ───────────────────────────────────────────────────────
     # Node indices:
-    #  0 BTS 2015-2024   1 GSOM Weather   2 Tail-Chain   3 Feature Eng
-    #  4 XGBoost         5 Pair Risk Scores  6 SHAP       7 Optimizer  8 Dashboard
+    #  0 BTS     1 GSOM     2 Tail-Chain   3 Feature Eng
+    #  4 XGBoost 5 Risk Scores  6 SHAP    7 Optimizer   8 Dashboard
+    _sk_font_color = "rgba(240,240,240,0.95)" if dark_mode else "rgba(20,20,20,0.9)"
+    _sk_node_line  = "rgba(255,255,255,0.2)"  if dark_mode else "rgba(0,0,0,0.15)"
+    _link_alpha    = "0.30"                   if dark_mode else "0.22"
     fig_sankey = go.Figure(go.Sankey(
         arrangement="fixed",
         node=dict(
-            label=["BTS 2015–2024<br>(Flight Ops)", "GSOM Weather<br>(NOAA Monthly)",
-                   "Tail-Chain<br>Rotations", "Feature Engineering<br>(70 features)",
-                   "XGBoost v3<br>Classifier", "Pair Risk Scores<br>(A×B×month)",
-                   "SHAP<br>Explanations", "Sequence Optimizer<br>(Hungarian Alg.)",
-                   "Risk Dashboard"],
-            # x: column position  y: vertical position (both 0–1, but Plotly clamps to (0.001, 0.999))
-            x=[0.01, 0.01, 0.01,  0.35, 0.58,  0.80, 0.80,  0.999, 0.999],
-            y=[0.10, 0.45, 0.82,  0.44, 0.44,  0.14, 0.76,  0.20,  0.78],
+            label=["BTS 2015–2024", "GSOM Weather", "Tail-Chain",
+                   "Feature Engineering", "XGBoost v3", "Pair Risk Scores",
+                   "SHAP", "Sequence Optimizer", "Dashboard"],
+            x=[0.01, 0.01, 0.01,  0.36, 0.60,  0.82, 0.82,  0.999, 0.999],
+            y=[0.10, 0.46, 0.82,  0.44, 0.44,  0.13, 0.77,  0.22,  0.78],
             color=["#005EB8","#1a7a4a","#8B4513","#7B2D8B","#C41E3A",
                    "#2ca02c","#ff7f0e","#555555","#005EB8"],
-            pad=20, thickness=20,
-            line=dict(color="rgba(255,255,255,0.15)", width=0.5),
+            pad=22, thickness=22,
+            line=dict(color=_sk_node_line, width=0.8),
             hovertemplate="<b>%{label}</b><extra></extra>",
         ),
         link=dict(
             source=[0, 1, 2,  3,  4, 4,  5, 5],
             target=[3, 3, 3,  4,  5, 6,  7, 8],
             value= [45,20,25, 90, 55,35, 28,28],
-            color=["rgba(0,94,184,0.25)","rgba(26,122,74,0.25)","rgba(139,69,19,0.25)",
-                   "rgba(123,45,139,0.3)","rgba(196,30,58,0.3)","rgba(196,30,58,0.2)",
-                   "rgba(44,160,44,0.3)","rgba(44,160,44,0.25)"],
+            color=[f"rgba(0,94,184,{_link_alpha})",   f"rgba(26,122,74,{_link_alpha})",
+                   f"rgba(139,69,19,{_link_alpha})",  f"rgba(123,45,139,{_link_alpha})",
+                   f"rgba(196,30,58,{_link_alpha})",  f"rgba(196,30,58,{_link_alpha})",
+                   f"rgba(44,160,44,{_link_alpha})",  f"rgba(44,160,44,{_link_alpha})"],
             hovertemplate="<b>%{source.label}</b> → <b>%{target.label}</b><extra></extra>",
         ),
     ))
     fig_sankey.update_layout(
         title="End-to-End Data & Model Pipeline",
         height=380, margin=dict(t=50, b=20, l=10, r=10),
-        font=dict(size=11),
+        font=dict(size=12, color=_sk_font_color),
     )
     st.plotly_chart(fig_sankey, width='stretch')
     st.markdown("<br>", unsafe_allow_html=True)
@@ -642,6 +649,8 @@ Pair-level metrics below are computed on all aggregated pair-month scores vs. ob
         st.markdown("<br>", unsafe_allow_html=True)
 
         _eval = get_eval_data()
+        _txt  = "rgba(220,220,220,0.9)" if dark_mode else "rgba(30,30,30,0.9)"
+        _grid = "rgba(255,255,255,0.08)" if dark_mode else "rgba(0,0,0,0.08)"
 
         # Row 1: ROC + PR
         _r1a, _r1b = st.columns(2)
@@ -671,7 +680,7 @@ Pair-level metrics below are computed on all aggregated pair-month scores vs. ob
             )
             fig_roc.add_annotation(
                 x=0.65, y=0.35, text=f"AUC = {_eval['auc']:.3f}",
-                font=dict(size=15, color="#005EB8"), showarrow=False,
+                font=dict(size=15, color=_txt), showarrow=False,
             )
             st.plotly_chart(fig_roc, width='stretch')
 
@@ -703,7 +712,7 @@ Pair-level metrics below are computed on all aggregated pair-month scores vs. ob
             )
             fig_pr.add_annotation(
                 x=0.35, y=0.35, text=f"AP = {_eval['ap']:.3f}",
-                font=dict(size=15, color="#C41E3A"), showarrow=False,
+                font=dict(size=15, color=_txt), showarrow=False,
             )
             st.plotly_chart(fig_pr, width='stretch')
 
@@ -713,10 +722,11 @@ Pair-level metrics below are computed on all aggregated pair-month scores vs. ob
             # Calibration scatter
             _cal = _eval["cal"]
             _cal_colors = [score_to_color(float(s)) for s in _cal["mean_score"]]
+            _diag_color = "rgba(200,200,200,0.55)" if dark_mode else "rgba(80,80,80,0.45)"
             fig_cal = go.Figure()
             fig_cal.add_trace(go.Scatter(
                 x=[0, 1], y=[0, 1], mode="lines",
-                line=dict(dash="dot", color="rgba(150,150,150,0.5)", width=1.5),
+                line=dict(dash="dot", color=_diag_color, width=1.5),
                 name="Perfect calibration", showlegend=True,
             ))
             fig_cal.add_trace(go.Scatter(
@@ -736,11 +746,13 @@ Pair-level metrics below are computed on all aggregated pair-month scores vs. ob
             ))
             fig_cal.update_layout(
                 title="Calibration Plot — Model Score vs. Observed Bad Rate<br>"
-                      "<sup>Dot size ∝ number of pair-months in decile. Above diagonal = model overestimates.</sup>",
+                      "<sup>Dot size ∝ pair-months in decile · Below diagonal = model overestimates risk</sup>",
                 xaxis=dict(title="Mean Model Risk Score (decile)", range=[0, 1],
-                           tickformat=".0%", tickvals=[0, 0.25, 0.5, 0.75, 1.0]),
+                           tickformat=".0%", tickvals=[0, 0.25, 0.5, 0.75, 1.0],
+                           gridcolor=_grid),
                 yaxis=dict(title="Mean Observed Bad Rate (decile)", range=[0, 1],
-                           tickformat=".0%", tickvals=[0, 0.25, 0.5, 0.75, 1.0]),
+                           tickformat=".0%", tickvals=[0, 0.25, 0.5, 0.75, 1.0],
+                           gridcolor=_grid),
                 height=400, margin=dict(t=70, b=50, l=60, r=20),
                 plot_bgcolor="rgba(0,0,0,0)",
                 legend=dict(x=0.02, y=0.92),
@@ -762,7 +774,7 @@ Pair-level metrics below are computed on all aggregated pair-month scores vs. ob
                         fillcolor=_cm_colors[_ri][_ci], line=dict(color="rgba(128,128,128,0.3)", width=1))
                     fig_cm.add_annotation(
                         x=_ci, y=_ri, text=_ann[_ri][_ci],
-                        font=dict(size=15), showarrow=False, align="center")
+                        font=dict(size=15, color=_txt), showarrow=False, align="center")
             fig_cm.update_layout(
                 title="Confusion Matrix (threshold = 0.50, full dataset)",
                 xaxis=dict(tickvals=[0,1], ticktext=["Pred Low", "Pred High"],
@@ -1812,10 +1824,10 @@ with tab_map:
     with col_m3:
         map_top_n = st.slider("Show top N airports", 10, 200, 30)
     with col_m4:
-        map_dark = st.toggle("Dark map", value=True, key="map_dark")
+        st.caption("Map style follows the\n🌙 Dark mode toggle in the sidebar.")
 
-    # Map geo colors based on user toggle
-    if map_dark:
+    # Map geo colors follow global dark_mode toggle
+    if dark_mode:
         _land  = "rgba(40,40,40,0.7)"
         _lake  = "rgba(30,80,120,0.5)"
         _coast = "rgba(160,160,160,0.5)"
