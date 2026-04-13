@@ -13,6 +13,18 @@ import pandas as pd
 import streamlit as st
 import plotly.graph_objects as go
 import plotly.express as px
+import plotly.io as pio
+
+# Global chart theme — transparent bg so dark/light mode both work
+pio.templates["aa_theme"] = go.layout.Template(
+    layout=go.Layout(
+        plot_bgcolor="rgba(0,0,0,0)",
+        paper_bgcolor="rgba(0,0,0,0)",
+        xaxis=dict(gridcolor="rgba(128,128,128,0.15)", zerolinecolor="rgba(128,128,128,0.3)"),
+        yaxis=dict(gridcolor="rgba(128,128,128,0.15)", zerolinecolor="rgba(128,128,128,0.3)"),
+    )
+)
+pio.templates.default = "plotly+aa_theme"
 
 # Allow imports from project root
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
@@ -132,12 +144,12 @@ def gauge_chart(risk_score: float, title: str = "Risk Score") -> go.Figure:
             "axis": {"range": [0, 100], "tickwidth": 1},
             "bar": {"color": color, "thickness": 0.35},
             "steps": [
-                {"range": [0, 40],  "color": "#eaffea"},
-                {"range": [40, 70], "color": "#fff3e0"},
-                {"range": [70, 100],"color": "#ffebee"},
+                {"range": [0, 40],  "color": "rgba(44,160,44,0.15)"},
+                {"range": [40, 70], "color": "rgba(255,127,14,0.15)"},
+                {"range": [70, 100],"color": "rgba(214,39,40,0.15)"},
             ],
             "threshold": {
-                "line": {"color": "#333", "width": 3},
+                "line": {"color": "rgba(150,150,150,0.8)", "width": 3},
                 "thickness": 0.75,
                 "value": risk_score * 100,
             },
@@ -166,7 +178,7 @@ def shap_bar_chart(shap_df: pd.DataFrame) -> go.Figure:
         xaxis_title="SHAP Value (impact on model output)",
         height=max(350, len(shap_df) * 28),
         margin=dict(l=10, r=80, t=60, b=40),
-        plot_bgcolor="white",
+        plot_bgcolor="rgba(0,0,0,0)",
         xaxis=dict(zeroline=True, zerolinewidth=1.5, zerolinecolor="#888"),
     )
     return fig
@@ -255,7 +267,7 @@ with tab_dash:
             xaxis=dict(range=[0, 1.05], tickformat=".0%"),
             height=max(400, top_n * 22),
             margin=dict(l=10, r=80, t=40, b=40),
-            plot_bgcolor="white",
+            plot_bgcolor="rgba(0,0,0,0)",
         )
         st.plotly_chart(fig_bar, width='stretch')
 
@@ -369,7 +381,7 @@ def _render_sequences(seqs: pd.DataFrame, date_label: str, dep_col: str | None =
                      annotation_text="Moderate", annotation_position="right")
     fig_tl.update_layout(xaxis=x_axis,
                           yaxis=dict(title="Risk Score", range=[-0.05,1.05], tickformat=".0%"),
-                          height=360, plot_bgcolor="white", showlegend=False)
+                          height=360, plot_bgcolor="rgba(0,0,0,0)", showlegend=False)
     st.plotly_chart(fig_tl, width='stretch')
 
 
@@ -753,7 +765,7 @@ with tab_optim:
                     ])
                     fig_cmp.update_layout(
                         barmode="group", title="Optimal vs Worst-case Total Risk",
-                        height=260, plot_bgcolor="white",
+                        height=260, plot_bgcolor="rgba(0,0,0,0)",
                         margin=dict(t=40,b=40,l=40,r=20),
                         legend=dict(orientation="h", y=-0.2),
                     )
@@ -795,7 +807,7 @@ with tab_optim:
                                    ticktext=[f"{h:02d}:00" for h in range(25)]),
                         yaxis=dict(visible=False),
                         height=max(300, len(result_df) * 22 + 60),
-                        plot_bgcolor="white",
+                        plot_bgcolor="rgba(0,0,0,0)",
                         title="Each bar = one A→DFW→B sequence (color = risk level)",
                         margin=dict(l=80, r=80, t=50, b=50),
                     )
@@ -947,7 +959,7 @@ with tab_query:
                        ticktext=[ap_meta.MONTH_NAMES[m][:3] for m in range(1, 13)]),
             yaxis=dict(title="Risk Score", range=[0, 1.05], tickformat=".0%"),
             height=300,
-            plot_bgcolor="white",
+            plot_bgcolor="rgba(0,0,0,0)",
             title="Seasonal Risk Profile",
             showlegend=False,
         )
