@@ -455,7 +455,12 @@ with tab_sched:
                 arr_df = opt.aviationstack_to_arrivals(arr_raw, 0, 24)
                 dep_df = opt.aviationstack_to_departures(dep_raw, 0, 24)
                 with col_l1:
-                    st.caption(status)
+                    if "error" in status.lower():
+                        st.error(status)
+                    elif len(arr_df) == 0 and len(dep_df) == 0:
+                        st.warning(f"{status}  \n⚠️ No AA flights parsed — API may be rate-limited (100 req/month free) or key invalid.")
+                    else:
+                        st.caption(status)
 
                 with st.expander(f"Raw: {len(arr_df)} AA arrivals / {len(dep_df)} AA departures"):
                     c1, c2 = st.columns(2)

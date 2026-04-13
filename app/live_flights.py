@@ -39,28 +39,38 @@ def icao_to_iata(icao: str | None) -> str | None:
 def fetch_aviationstack(api_key: str) -> tuple[list, list, str]:
     """
     Fetch AA arrivals + departures at DFW via AviationStack.
-    2 API calls total (counts against 100/month free quota).
+    2 API calls (counts against 100/month free quota).
     Returns (arr_raw, dep_raw, status).
     """
+    error_msg = None
+
     def _call(airport_param: str) -> list:
+        nonlocal error_msg
         try:
             r = requests.get(AVIATIONSTACK_BASE, params={
-                "access_key":   api_key,
-                "airline_iata": "AA",
-                airport_param:  "DFW",
-                "limit":        100,
+                "access_key": api_key,
+                airport_param: "DFW",
+                "limit": 100,
             }, timeout=TIMEOUT_S)
             data = r.json()
             if "error" in data:
+                error_msg = data["error"].get("message", str(data["error"]))
                 return []
-            return data.get("data", [])
-        except Exception:
+            flights = data.get("data", [])
+            # Filter AA client-side (more reliable than server-side airline_iata on free tier)
+            return [f for f in flights
+                    if (f.get("airline") or {}).get("iata") == "AA"]
+        except Exception as e:
+            error_msg = str(e)
             return []
 
     arr = _call("arr_iata")
     dep = _call("dep_iata")
     now = datetime.now(timezone.utc).strftime("%H:%M UTC")
-    status = f"AviationStack — {len(arr)} AA arrivals, {len(dep)} AA departures at DFW — {now}"
+    if error_msg:
+        status = f"AviationStack error: {error_msg} — {now}"
+    else:
+        status = f"AviationStack — {len(arr)} AA arrivals, {len(dep)} AA departures at DFW — {now}"
     return arr, dep, status
 
 
