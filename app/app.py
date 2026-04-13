@@ -369,7 +369,7 @@ with tab_overview:
     ))
     fig_sankey.update_layout(
         title="End-to-End Data & Model Pipeline",
-        height=380, margin=dict(t=50, b=20, l=10, r=10),
+        height=420, margin=dict(t=50, b=20, l=10, r=10),
         font=dict(size=12, color=_sk_font_color),
     )
     st.plotly_chart(fig_sankey, width='stretch')
