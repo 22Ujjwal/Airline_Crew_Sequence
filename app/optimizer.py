@@ -14,6 +14,8 @@ from scipy.optimize import linear_sum_assignment
 MIN_TURN = 30    # min turnaround minutes
 MAX_TURN = 240   # max turnaround minutes
 INFEASIBLE = 2.0 # penalty > max risk (1.0), forces infeasible pairs out
+HIGH_THRESHOLD = 0.30   # calibrated score thresholds
+MOD_THRESHOLD  = 0.20
 
 
 # ── Cost matrix ───────────────────────────────────────────────────────────────
@@ -23,7 +25,7 @@ def build_cost_matrix(
     departures: pd.DataFrame,     # cols: airport, time_min, flight, time_str
     scores_idx: pd.DataFrame,     # pair_risk_scores indexed by (airport_A, airport_B, Month)
     month: int,
-    unknown_risk: float = 0.50,   # neutral score for pairs not in training data
+    unknown_risk: float = 0.20,   # neutral score for unknown pairs (calibrated scale)
 ) -> np.ndarray:
     """
     Return n_arrivals × n_departures cost matrix.
@@ -94,7 +96,7 @@ def optimize_sequences(
             "dep_time":       dep.get("time_str", ""),
             "turnaround_min": ta,
             "risk_score":     c,
-            "risk_label":     "HIGH" if c >= 0.70 else "MODERATE" if c >= 0.40 else "LOW",
+            "risk_label":     "HIGH" if c >= HIGH_THRESHOLD else "MODERATE" if c >= MOD_THRESHOLD else "LOW",
         })
 
     df = pd.DataFrame(results).sort_values("risk_score", ascending=False).reset_index(drop=True)
@@ -114,7 +116,7 @@ def optimize_sequences(
         "optimal_avg":       float(feasible_costs[feasible_mask].mean()) if feasible_mask.any() else 0.0,
         "worst_total":       worst_cost,
         "risk_saved":        max(0.0, worst_cost - float(feasible_costs[feasible_mask].sum())),
-        "pct_high":          float((feasible_costs[feasible_mask] >= 0.70).mean()) if feasible_mask.any() else 0.0,
+        "pct_high":          float((feasible_costs[feasible_mask] >= HIGH_THRESHOLD).mean()) if feasible_mask.any() else 0.0,
         "cost_matrix":       cost,
         "row_ind":           row_ind,
         "col_ind":           col_ind,

@@ -16,6 +16,24 @@ RAW       = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "data"
 
 RISK_THRESHOLD = 0.25
 
+# ── Isotonic calibration (model score → observed bad rate scale) ─────────────
+import json as _json
+_cal_path = os.path.join(PROCESSED, "calibration_isotonic.json")
+if os.path.exists(_cal_path):
+    with open(_cal_path) as _f:
+        _cal = _json.load(_f)
+    _CAL_X = np.array(_cal["x"])
+    _CAL_Y = np.array(_cal["y"])
+    def _calibrate(p: float) -> float:
+        return float(np.interp(p, _CAL_X, _CAL_Y))
+else:
+    def _calibrate(p: float) -> float:
+        return p
+
+# Calibrated risk thresholds (on observed-bad-rate scale)
+HIGH_THRESHOLD = 0.30   # ≥30% of sequences historically disrupted
+MOD_THRESHOLD  = 0.20   # ≥20% of sequences historically disrupted
+
 FEATURE_COLS = [
     # Airport A BTS weather stats
     "A_weather_delay_rate", "A_weather_cancel_rate", "A_avg_weather_delay_min",
@@ -234,7 +252,8 @@ class RiskPredictor:
         row["Month"] = month
 
         X = row[self.feature_cols].to_frame().T.astype(float)
-        prob = float(self.model.predict_proba(X)[0, 1])
+        prob_raw = float(self.model.predict_proba(X)[0, 1])
+        prob = _calibrate(prob_raw)   # map to observed-bad-rate scale
 
         return {
             "risk_score": prob,
@@ -285,16 +304,16 @@ class RiskPredictor:
 
 
 def _risk_label(score: float) -> str:
-    if score >= 0.70:
+    if score >= HIGH_THRESHOLD:
         return "HIGH RISK"
-    if score >= 0.40:
+    if score >= MOD_THRESHOLD:
         return "MODERATE RISK"
     return "LOW RISK"
 
 
 def _risk_color(score: float) -> str:
-    if score >= 0.70:
+    if score >= HIGH_THRESHOLD:
         return "#d62728"
-    if score >= 0.40:
+    if score >= MOD_THRESHOLD:
         return "#ff7f0e"
     return "#2ca02c"

@@ -156,7 +156,7 @@ def score_sequences(seqs: pd.DataFrame, scores_flat: pd.DataFrame) -> pd.DataFra
     seqs = seqs.merge(lookup, on=["airport_A", "airport_B", "Month"], how="left")
     seqs.rename(columns={"avg_risk_score": "risk_score"}, inplace=True)
     seqs["risk_label"] = seqs["risk_score"].apply(
-        lambda s: ("HIGH" if s >= 0.70 else "MODERATE" if s >= 0.40 else "LOW")
+        lambda s: ("HIGH" if s >= 0.30 else "MODERATE" if s >= 0.20 else "LOW")
         if pd.notna(s) else "N/A"
     )
     return seqs.sort_values("risk_score", ascending=False, na_position="last")

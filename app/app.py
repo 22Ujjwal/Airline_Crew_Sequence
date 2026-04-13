@@ -191,18 +191,21 @@ def risk_badge(label: str) -> str:
     return f'<span class="{cls}">{label}</span>'
 
 
+HIGH_THRESHOLD = 0.30   # calibrated: ≥30% of sequences historically disrupted
+MOD_THRESHOLD  = 0.20   # calibrated: ≥20%
+
+
 def score_to_color(score: float) -> str:
-    """Interpolate red–yellow–green based on risk score."""
-    if score >= 0.70:
+    if score >= HIGH_THRESHOLD:
         return "#d62728"
-    if score >= 0.40:
+    if score >= MOD_THRESHOLD:
         return "#ff7f0e"
     return "#2ca02c"
 
 
 def gauge_chart(risk_score: float, title: str = "Risk Score") -> go.Figure:
-    label = ("HIGH RISK" if risk_score >= 0.70 else
-             "MODERATE RISK" if risk_score >= 0.40 else "LOW RISK")
+    label = ("HIGH RISK" if risk_score >= HIGH_THRESHOLD else
+             "MODERATE RISK" if risk_score >= MOD_THRESHOLD else "LOW RISK")
     color = score_to_color(risk_score)
     fig = go.Figure(go.Indicator(
         mode="gauge+number+delta",
@@ -214,9 +217,9 @@ def gauge_chart(risk_score: float, title: str = "Risk Score") -> go.Figure:
             "axis": {"range": [0, 100], "tickwidth": 1},
             "bar": {"color": color, "thickness": 0.35},
             "steps": [
-                {"range": [0, 40],  "color": "rgba(44,160,44,0.15)"},
-                {"range": [40, 70], "color": "rgba(255,127,14,0.15)"},
-                {"range": [70, 100],"color": "rgba(214,39,40,0.15)"},
+                {"range": [0, 20],  "color": "rgba(44,160,44,0.15)"},
+                {"range": [20, 30], "color": "rgba(255,127,14,0.15)"},
+                {"range": [30, 100],"color": "rgba(214,39,40,0.15)"},
             ],
             "threshold": {
                 "line": {"color": "rgba(150,150,150,0.8)", "width": 3},
@@ -260,7 +263,7 @@ with st.sidebar:
     st.title("AA DFW Crew Risk")
     st.caption("Weather-driven crew sequence risk scoring for A→DFW→B routes")
     st.divider()
-    st.markdown("**Model:** XGBoost v3  \n**Threshold:** 25% bad-rate  \n**Val AUC:** 0.833  \n**Val AP:** 0.830")
+    st.markdown("**Model:** XGBoost v3 + Isotonic Calibration  \n**High risk:** ≥30% disruption rate  \n**Val AUC:** 0.833  \n**Val AP:** 0.830")
     st.divider()
     st.subheader("Live Schedule API")
     aviationstack_key = st.text_input(
@@ -786,9 +789,9 @@ Pair-level metrics below are computed on all aggregated pair-month scores vs. ob
             )
             st.plotly_chart(fig_cm, width='stretch')
 
-        # Score distribution histogram
-        _bands = ["LOW\n(<0.40)", "MODERATE\n(0.40–0.70)", "HIGH\n(≥0.70)"]
-        _pcts  = [0.5869, 0.2466, 0.1665]
+        # Score distribution histogram (calibrated thresholds)
+        _bands = ["LOW\n(<20%)", "MODERATE\n(20–30%)", "HIGH\n(≥30%)"]
+        _pcts  = [0.630, 0.228, 0.142]
         _cnts  = [int(p * 429116) for p in _pcts]
         fig_dist = go.Figure(go.Bar(
             x=_bands, y=_pcts,
@@ -1036,9 +1039,9 @@ with tab_dash:
 
     # Summary metrics
     m1, m2, m3, m4 = st.columns(4)
-    pct_high = (df_view["avg_risk_score"] >= 0.70).mean() * 100
+    pct_high = (df_view["avg_risk_score"] >= HIGH_THRESHOLD).mean() * 100
     m1.metric("Pairs Analyzed", f"{len(df_view):,}")
-    m2.metric("High Risk (>70%)", f"{pct_high:.1f}%")
+    m2.metric("High Risk (>30%)", f"{pct_high:.1f}%")
     m3.metric("Avg Risk Score", f"{df_view['avg_risk_score'].mean():.1%}")
     top_a = df_view.groupby("airport_A")["avg_risk_score"].mean().idxmax()
     m4.metric("Riskiest Origin", top_a)
@@ -1180,9 +1183,9 @@ def _render_sequences(seqs: pd.DataFrame, date_label: str, dep_col: str | None =
                            f"<br>Turnaround: {row.get('turnaround_min','?')} min<extra></extra>"),
             showlegend=False,
         ))
-    fig_tl.add_hline(y=0.70, line_dash="dash", line_color="red",
+    fig_tl.add_hline(y=HIGH_THRESHOLD, line_dash="dash", line_color="red",
                      annotation_text="High Risk", annotation_position="right")
-    fig_tl.add_hline(y=0.40, line_dash="dash", line_color="orange",
+    fig_tl.add_hline(y=MOD_THRESHOLD, line_dash="dash", line_color="orange",
                      annotation_text="Moderate", annotation_position="right")
     fig_tl.update_layout(xaxis=x_axis,
                           yaxis=dict(title="Risk Score", range=[-0.05,1.05], tickformat=".0%"),
@@ -1701,26 +1704,24 @@ with tab_query:
 
                 # Recommendation box
                 score = result["risk_score"]
-                if score >= 0.70:
+                if score >= HIGH_THRESHOLD:
                     st.error(
                         f"**Recommendation: Do Not Assign**\n\n"
-                        f"This sequence has a {score:.0%} weather disruption risk. "
-                        f"Weather patterns at **{airport_a}** and **{airport_b}** create "
-                        f"compounding disruption potential at DFW hub. In {ap_meta.MONTH_NAMES[q_month]}, "
-                        f"{result['observed_bad_rate']:.0%} of historical sequences experienced "
-                        f"significant weather delays."
+                        f"Model predicts **{score:.0%}** of sequences on this route are weather-disrupted "
+                        f"in {ap_meta.MONTH_NAMES[q_month]} — above the {HIGH_THRESHOLD:.0%} high-risk threshold. "
+                        f"Observed historical disruption rate: {result['observed_bad_rate']:.0%}."
                     )
-                elif score >= 0.40:
+                elif score >= MOD_THRESHOLD:
                     st.warning(
                         f"**Recommendation: Caution**\n\n"
-                        f"This sequence has moderate weather risk ({score:.0%}). "
-                        f"Consider adding buffer time or monitoring weather. "
+                        f"Model predicts **{score:.0%}** of sequences are disrupted — moderate risk. "
+                        f"Consider buffer time or weather monitoring. "
                         f"Historical disruption rate: {result['observed_bad_rate']:.0%}."
                     )
                 else:
                     st.success(
                         f"**Recommendation: Acceptable**\n\n"
-                        f"This sequence has low weather risk ({score:.0%}). "
+                        f"Model predicts **{score:.0%}** of sequences are disrupted — low risk. "
                         f"Historical disruption rate: {result['observed_bad_rate']:.0%}."
                     )
 
@@ -1766,10 +1767,10 @@ with tab_query:
             ),
             hovertemplate="<b>%{x}</b><br>Risk: %{text}<extra></extra>",
         ))
-        fig_monthly.add_hrect(y0=0.70, y1=1.05, fillcolor="red", opacity=0.07, line_width=0)
-        fig_monthly.add_hrect(y0=0.40, y1=0.70, fillcolor="orange", opacity=0.07, line_width=0)
-        fig_monthly.add_hline(y=0.70, line_dash="dash", line_color="red", opacity=0.4)
-        fig_monthly.add_hline(y=0.40, line_dash="dash", line_color="orange", opacity=0.4)
+        fig_monthly.add_hrect(y0=HIGH_THRESHOLD, y1=1.05, fillcolor="red", opacity=0.07, line_width=0)
+        fig_monthly.add_hrect(y0=MOD_THRESHOLD, y1=HIGH_THRESHOLD, fillcolor="orange", opacity=0.07, line_width=0)
+        fig_monthly.add_hline(y=HIGH_THRESHOLD, line_dash="dash", line_color="red", opacity=0.4)
+        fig_monthly.add_hline(y=MOD_THRESHOLD, line_dash="dash", line_color="orange", opacity=0.4)
         fig_monthly.update_layout(
             xaxis=dict(tickvals=list(range(1, 13)),
                        ticktext=[ap_meta.MONTH_NAMES[m][:3] for m in range(1, 13)]),
