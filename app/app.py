@@ -343,7 +343,7 @@ def _render_sequences(seqs: pd.DataFrame, date_label: str, dep_col: str | None =
         )
 
     def _color(row):
-        c = {"HIGH": "#ffcccc", "MODERATE": "#fff3cc", "LOW": "#ccffcc"}.get(
+        c = {"HIGH": "rgba(214,39,40,0.25)", "MODERATE": "rgba(255,127,14,0.25)", "LOW": "rgba(44,160,44,0.25)"}.get(
             str(row.get("Risk Level", "")), "")
         return [f"background-color:{c}" for _ in row]
 
@@ -730,7 +730,7 @@ with tab_optim:
                         disp_r["Risk Score"] = disp_r["Risk Score"].map("{:.1%}".format)
 
                         def _cr(row):
-                            c = {"HIGH":"#ffcccc","MODERATE":"#fff3cc","LOW":"#ccffcc"}.get(
+                            c = {"HIGH":"rgba(214,39,40,0.25)","MODERATE":"rgba(255,127,14,0.25)","LOW":"rgba(44,160,44,0.25)"}.get(
                                 str(row.get("Risk Level","")), "")
                             return [f"background-color:{c}" for _ in row]
 
