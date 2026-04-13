@@ -1004,7 +1004,7 @@ with tab_map:
 
     scores_map = get_pair_scores()
 
-    col_m1, col_m2, col_m3 = st.columns(3)
+    col_m1, col_m2, col_m3, col_m4 = st.columns(4)
     with col_m1:
         map_month = st.slider("Month", 1, 12, 6, key="map_month")
         st.caption(ap_meta.MONTH_NAMES[map_month])
@@ -1012,6 +1012,22 @@ with tab_map:
         map_role = st.radio("Airport Role", ["As Origin (A)", "As Destination (B)"], horizontal=True)
     with col_m3:
         map_top_n = st.slider("Show top N airports", 10, 200, 30)
+    with col_m4:
+        map_dark = st.toggle("Dark map", value=True, key="map_dark")
+
+    # Map geo colors based on user toggle
+    if map_dark:
+        _land  = "rgba(40,40,40,0.7)"
+        _lake  = "rgba(30,80,120,0.5)"
+        _coast = "rgba(160,160,160,0.5)"
+        _sub   = "rgba(160,160,160,0.3)"
+        _bg    = "rgba(15,17,22,0.0)"
+    else:
+        _land  = "#e8ecf0"
+        _lake  = "#c6dff0"
+        _coast = "#aaaaaa"
+        _sub   = "#cccccc"
+        _bg    = "rgba(0,0,0,0)"
 
     role_key   = "origin" if map_role == "As Origin (A)" else "dest"
     role_label = "Origin"  if map_role == "As Origin (A)" else "Destination"
@@ -1080,11 +1096,11 @@ with tab_map:
         geo=dict(
             scope="usa",
             projection_type="albers usa",
-            bgcolor="rgba(0,0,0,0)",
-            showland=True,    landcolor="rgba(40,40,40,0.6)",
-            showlakes=True,   lakecolor="rgba(30,80,120,0.4)",
-            showcoastlines=True, coastlinecolor="rgba(150,150,150,0.5)",
-            showsubunits=True,   subunitcolor="rgba(150,150,150,0.3)",
+            bgcolor=_bg,
+            showland=True,       landcolor=_land,
+            showlakes=True,      lakecolor=_lake,
+            showcoastlines=True, coastlinecolor=_coast,
+            showsubunits=True,   subunitcolor=_sub,
             showframe=False,
         ),
         title=f"Airport Risk Map — {role_label} — {ap_meta.MONTH_NAMES[map_month]}",
