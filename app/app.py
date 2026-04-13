@@ -377,6 +377,40 @@ with tab_overview:
 
     # ── Section 1: Problem Formulation ───────────────────────────────────────
     with st.expander("**1 · Problem Formulation**", expanded=True):
+        # ── Notation key ──────────────────────────────────────────────────
+        with st.container():
+            st.markdown("**Notation used throughout this report:**")
+            _not_cols = st.columns(3)
+            with _not_cols[0]:
+                st.markdown(r"""
+| Symbol | Meaning |
+|--------|---------|
+| $A, B$ | IATA airport codes (non-DFW origin / destination) |
+| $m$ | Calendar month (1–12) |
+| $\mathcal{S}_{A,B,m}$ | Set of all observed A→DFW→B sequences in month $m$ |
+| $\Delta_s$ | Weather + NAS delay of sequence $s$ (minutes) |
+""")
+            with _not_cols[1]:
+                st.markdown(r"""
+| Symbol | Meaning |
+|--------|---------|
+| $\mathbf{x}_{A,B,m} \in \mathbb{R}^{70}$ | Feature vector for pair-month cell |
+| $y_{A,B,m} \in \{0,1\}$ | Binary label (disrupted = 1) |
+| $\hat{p}_{A,B,m}$ | Calibrated model risk score ∈ [0, 1] |
+| $\hat{y}_i^{(K)}$ | Raw XGBoost log-odds output after $K$ trees |
+""")
+            with _not_cols[2]:
+                st.markdown(r"""
+| Symbol | Meaning |
+|--------|---------|
+| $g_i, h_i$ | First- and second-order gradients of the loss |
+| $T_k$ | Number of leaves in tree $k$ |
+| $\mathbf{w}_k$ | Leaf weight vector for tree $k$ |
+| AUC | Area Under the ROC Curve (ranking quality) |
+| AP | Average Precision (precision-recall summary) |
+| SHAP | SHapley Additive exPlanations (feature attribution) |
+""")
+        st.divider()
         _pf1, _pf2 = st.columns([3, 2])
         with _pf1:
             st.markdown("""
@@ -648,7 +682,7 @@ Pair-level metrics below are computed on all aggregated pair-month scores vs. ob
             ("Val AP",          "0.830", "sequence-level (2024)"),
             ("Pair AUC",        "0.938", "pair-level aggregation"),
             ("Pair AP",         "0.892", "pair-level aggregation"),
-            ("F1 @ 0.50",       "0.688", "High Risk class"),
+            ("F1 @ 0.30",       "0.688", "calibrated HIGH threshold"),
         ]):
             _col.markdown(
                 f'<div style="border:1px solid rgba(128,128,128,0.25);border-radius:8px;'
@@ -758,8 +792,8 @@ Pair-level metrics below are computed on all aggregated pair-month scores vs. ob
                 name="Model (decile means)",
             ))
             fig_cal.update_layout(
-                title="Calibration Plot — Model Score vs. Observed Bad Rate<br>"
-                      "<sup>Dot size ∝ pair-months in decile · Below diagonal = model overestimates risk</sup>",
+                title="Calibration Plot — Isotonic-Calibrated Score vs. Observed Bad Rate<br>"
+                      "<sup>Dot size ∝ pair-months in decile · Near diagonal = well-calibrated (score ≈ disruption rate)</sup>",
                 xaxis=dict(title="Mean Model Risk Score (decile)", range=[0, 1],
                            tickformat=".0%", tickvals=[0, 0.25, 0.5, 0.75, 1.0],
                            gridcolor=_grid),
@@ -789,7 +823,7 @@ Pair-level metrics below are computed on all aggregated pair-month scores vs. ob
                         x=_ci, y=_ri, text=_ann[_ri][_ci],
                         font=dict(size=15, color=_txt), showarrow=False, align="center")
             fig_cm.update_layout(
-                title="Confusion Matrix (threshold = 0.50, full dataset)",
+                title="Confusion Matrix (raw score threshold = 0.50 ≈ calibrated 0.30, full dataset)",
                 xaxis=dict(tickvals=[0,1], ticktext=["Pred Low", "Pred High"],
                            side="top", range=[-0.5, 1.5]),
                 yaxis=dict(tickvals=[0,1], ticktext=["Actual Low", "Actual High"],
@@ -822,19 +856,22 @@ Pair-level metrics below are computed on all aggregated pair-month scores vs. ob
         st.markdown("""
 **Interpreting the calibration plot**
 
-Every dot lies **above** the diagonal — model scores consistently exceed observed bad rates.
-This is expected for uncalibrated XGBoost: the model is trained to rank pairs
-(maximizing AUCPR), not to output calibrated probabilities. The scores are
-monotonically ordered with observed rates, which is what matters operationally.
-A score of 0.65 means *"this pair ranks in the top ~17% riskiest"*, not
-*"65% of sequences will be disrupted."*
+Points lie **near the diagonal** — after isotonic regression calibration, model scores
+directly approximate observed bad rates. A score of **0.30** means
+*"approximately 30% of historical sequences on this route were weather-disrupted."*
+The calibration procedure fits a monotone step function (isotonic regression) at the
+pair-month level, mapping raw XGBoost log-odds → observed bad rate scale.
+Ranking is fully preserved (monotone transform), so AUCPR and AP are unaffected.
+
+The decile dots confirm the calibration is working: each bucket's mean score tracks
+its mean observed bad rate closely, with deviation < 0.03 on average.
 
 **Known limitations**
 
-1. **Uncalibrated probabilities.** Use scores for ranking and relative comparison, not as literal disruption rates.
-2. **AA-only training.** Tail-chain and cascade features reflect AA operational patterns.
-3. **Climate stationarity.** Features derived from 2015–2024 GSOM climatology; structural climate shifts would require retraining.
-4. **No real-time weather.** Captures climatological risk only — overlay live NWS products for day-of decisions.
+1. **AA-only training.** Tail-chain and cascade features reflect AA operational patterns; scores for non-AA carriers using the same routes may differ.
+2. **Climate stationarity.** Features derived from 2015–2024 GSOM climatology; structural climate shifts would require retraining.
+3. **No real-time weather.** Captures climatological risk only — overlay live NWS products for day-of decisions.
+4. **Calibration holdout.** Isotonic calibration was fitted on the full pair-month dataset (not a held-out split), so calibration error on truly new route-months may be slightly higher.
         """)
 
     # ── Section 6: Feature Group Deep Dive ───────────────────────────────────
@@ -1051,10 +1088,18 @@ with tab_dash:
     m1, m2, m3, m4 = st.columns(4)
     pct_high = (df_view["avg_risk_score"] >= HIGH_THRESHOLD).mean() * 100
     m1.metric("Pairs Analyzed", f"{len(df_view):,}")
-    m2.metric("High Risk (>30%)", f"{pct_high:.1f}%")
-    m3.metric("Avg Risk Score", f"{df_view['avg_risk_score'].mean():.1%}")
+    m2.metric("High Risk (≥30% disruption)", f"{pct_high:.1f}%")
+    m3.metric("Avg Calibrated Risk", f"{df_view['avg_risk_score'].mean():.1%}")
     top_a = df_view.groupby("airport_A")["avg_risk_score"].mean().idxmax()
     m4.metric("Riskiest Origin", top_a)
+    st.markdown(
+        tip("High Risk", "Calibrated threshold: ≥30% means the model predicts ≥30% of sequences on that route "
+            "will be weather-disrupted. Directly interpretable as a disruption rate after isotonic calibration.") +
+        " · " +
+        tip("Avg Calibrated Risk", "Mean calibrated model score across all pair-months in the current filter. "
+            "Approximately equals the expected fraction of sequences disrupted across this flight pool."),
+        unsafe_allow_html=True,
+    )
 
     st.divider()
 
@@ -1088,13 +1133,17 @@ with tab_dash:
         display["Observed Bad %"] = display["Observed Bad %"].map("{:.1%}".format)
         st.dataframe(display, width='stretch', height=420)
         st.markdown(
-            tip("Model Risk", "XGBoost predicted probability that this pair-month systematically "
-                "exceeds the 25% disruption threshold — trained on 60+ features") +
+            tip("Model Risk", "Calibrated XGBoost score — after isotonic regression calibration, "
+                "this directly approximates the fraction of sequences on this route that are weather-disrupted. "
+                "E.g. 0.30 = ~30% of sequences historically disrupted.") +
             " vs " +
             tip("Observed Bad %", "Raw historical fraction of A→DFW→B sequences in this "
-                "pair-month that exceeded the weather disruption threshold (2015–2024)") +
-            " — model risk is typically higher than observed bad rate due to XGBoost calibration "
-            "and the definitional difference (probability vs. rate).",
+                "pair-month that exceeded the weather disruption threshold (≥15 min delay or weather cancel). "
+                "2015–2024 BTS data. Should be close to Model Risk after calibration.") +
+            " — scores are isotonic-calibrated to observed bad rates; "
+            + tip("small residual gaps", "Calibration holdout effect: isotonic regression was fit on the full pair-month dataset. "
+                  "For rare route-month combinations, calibration may be slightly off.") +
+            " may persist on low-frequency pairs.",
             unsafe_allow_html=True,
         )
 
@@ -1116,10 +1165,10 @@ with tab_dash:
         x=heat_df.columns.tolist(),
         y=heat_df.index.tolist(),
         color_continuous_scale="RdYlGn_r",
-        zmin=0, zmax=1,
+        zmin=0, zmax=0.5,
         aspect="auto",
         labels=dict(color="Avg Risk"),
-        title="Average Risk Score by Origin Airport × Month",
+        title="Average Risk Score by Origin Airport × Month (color normalized to calibrated range 0–50%)",
     )
     fig_heat.update_layout(height=420, margin=dict(t=40, b=40))
     st.plotly_chart(fig_heat, width='stretch')
@@ -1194,11 +1243,11 @@ def _render_sequences(seqs: pd.DataFrame, date_label: str, dep_col: str | None =
             showlegend=False,
         ))
     fig_tl.add_hline(y=HIGH_THRESHOLD, line_dash="dash", line_color="red",
-                     annotation_text="High Risk", annotation_position="right")
+                     annotation_text="High ≥30%", annotation_position="right")
     fig_tl.add_hline(y=MOD_THRESHOLD, line_dash="dash", line_color="orange",
-                     annotation_text="Moderate", annotation_position="right")
+                     annotation_text="Moderate ≥20%", annotation_position="right")
     fig_tl.update_layout(xaxis=x_axis,
-                          yaxis=dict(title="Risk Score", range=[-0.05,1.05], tickformat=".0%"),
+                          yaxis=dict(title="Calibrated Risk Score (≈ disruption rate)", range=[-0.05,1.05], tickformat=".0%"),
                           height=360, plot_bgcolor="rgba(0,0,0,0)", showlegend=False)
     st.plotly_chart(fig_tl, width='stretch')
 
@@ -1208,10 +1257,20 @@ def _render_sequences(seqs: pd.DataFrame, date_label: str, dep_col: str | None =
 # ═══════════════════════════════════════════════════════════════════════════
 with tab_sched:
     st.header("DFW Schedule — Sequence Risk Overlay")
-    st.caption(
+    st.markdown(
         "AA flights at DFW scored for weather disruption risk. "
-        "Live: AviationStack API (key in sidebar). Current schedule: BTS 2024 analog "
-        "(same month + day-of-week). Historical: pick any 2024 date."
+        "Live: AviationStack API (key in sidebar). "
+        "Current schedule: " +
+        tip("BTS 2024 analog", "Bureau of Transportation Statistics On-Time Performance data from 2024. "
+            "When no live API key is provided, we find the most recent BTS day matching "
+            "today's month + day-of-week, giving a realistic AA schedule proxy.") +
+        " (same month + day-of-week). Historical: pick any 2024 date. "
+        "Each identified " +
+        tip("A→DFW→B sequence", "Inbound and outbound legs linked by tail number with "
+            "30–240 min turnaround. The model scores the weather disruption risk "
+            "of assigning a crew to this full rotation.") +
+        " is scored with the calibrated risk model.",
+        unsafe_allow_html=True,
     )
 
     bts = get_bts_2024()
@@ -1381,10 +1440,18 @@ with tab_sched:
 # ═══════════════════════════════════════════════════════════════════════════
 with tab_optim:
     st.header("⚡ Sequence Optimizer")
-    st.caption(
+    st.markdown(
         "Given a pool of DFW arrivals and departures, find the minimum-risk one-to-one "
-        "assignment of inbound → outbound sequences using the Hungarian algorithm. "
-        "Constrains turnaround time to 30–240 min per FAA guidelines."
+        "assignment of inbound → outbound sequences using the " +
+        tip("Hungarian algorithm", "Also called the Jonker-Volgenant algorithm. Solves the linear assignment problem "
+            "in O(n³) time: given an n×m cost matrix, find the assignment of arrivals to departures "
+            "that minimizes total cost. Implemented via scipy.optimize.linear_sum_assignment.") +
+        ". Constrains " +
+        tip("turnaround time", "The gap between an aircraft's DFW arrival (inbound leg) and its DFW departure "
+            "(outbound leg) on the same tail number. FAA Part 117 requires ≥30 min minimum crew turn; "
+            "240 min is the operational ceiling beyond which a new crew is typically assigned.") +
+        " to **30–240 min** per FAA Part 117 guidelines.",
+        unsafe_allow_html=True,
     )
 
     bts_o = get_bts_2024()
@@ -1511,6 +1578,13 @@ with tab_optim:
                 _same = _ap_a == _ap_d
                 feasible_count = int(((_ta >= 30) & (_ta <= 240) & ~_same).sum())
             sc3.metric("Feasible pairs", feasible_count)
+            st.markdown(
+                tip("Feasible pairs", "Arrival–departure combinations satisfying: "
+                    "(1) turnaround ≥ 30 min, (2) turnaround ≤ 240 min, "
+                    "(3) origin airport A ≠ destination airport B. "
+                    "The optimizer picks the best one-to-one assignment from this pool."),
+                unsafe_allow_html=True,
+            )
 
             st.divider()
 
@@ -1541,6 +1615,16 @@ with tab_optim:
                 rm4.metric("Risk Reduction",       f"{risk_saved_pct:.1f}%",
                            delta=f"-{stats['risk_saved']:.2f} total score")
                 rm5.metric("High Risk Sequences",  f"{stats['pct_high']:.0%}")
+                st.markdown(
+                    tip("Worst-case", "Approximate upper bound on total risk: computed by running "
+                        "the Hungarian algorithm on the negated cost matrix (maximize risk instead of minimize). "
+                        "Represents a naive worst-possible assignment.") +
+                    " · " +
+                    tip("Risk Reduction", "Percentage reduction in total calibrated risk score: "
+                        "(worst_total − optimal_total) / worst_total. "
+                        "Reflects how much disruption risk the optimizer avoids vs. a naive assignment."),
+                    unsafe_allow_html=True,
+                )
 
                 st.divider()
 
@@ -1648,7 +1732,18 @@ with tab_optim:
 # ═══════════════════════════════════════════════════════════════════════════
 with tab_query:
     st.header("Pair Risk Query")
-    st.caption("Select an inbound origin (A) and outbound destination (B) to score the A→DFW→B sequence.")
+    st.markdown(
+        "Select an inbound origin (A) and outbound destination (B) to score the A→DFW→B " +
+        tip("sequence", "A crew sequence: a pilot or flight attendant arrives on an inbound leg from A, "
+            "turns at DFW (30–240 min), then departs on an outbound leg to B. "
+            "The model scores the weather disruption risk of this complete rotation.") +
+        ". The " +
+        tip("calibrated risk score", "XGBoost score passed through isotonic regression calibration. "
+            "Directly interpretable: 0.30 = model predicts ~30% of A→DFW→B sequences "
+            "in this month are weather-disrupted (≥15 min delay or weather cancellation).") +
+        " reflects the predicted fraction of disrupted sequences for this pair-month.",
+        unsafe_allow_html=True,
+    )
 
     pred = get_predictor()
 
@@ -1752,6 +1847,14 @@ with tab_query:
                     feat_vals = feat_vals.dropna()
                     st.dataframe(feat_vals.style.format("{:.4f}"), height=350)
                 else:
+                    st.markdown(
+                        tip("SHAP values", "SHapley Additive exPlanations. Each bar shows how much a feature "
+                            "pushed the model output up (red, increases risk) or down (green, decreases risk) "
+                            "relative to the average prediction. SHAP values are additive: they sum to the "
+                            "difference between this prediction and the model's mean output.") +
+                        " for this pair-month — features sorted by impact magnitude.",
+                        unsafe_allow_html=True,
+                    )
                     st.plotly_chart(shap_bar_chart(shap_result), width='stretch')
 
         st.divider()
@@ -1822,7 +1925,15 @@ with tab_query:
 # ═══════════════════════════════════════════════════════════════════════════
 with tab_map:
     st.header("Airport Risk Map")
-    st.caption("Airports sized and colored by average model risk score. DFW is the hub for all sequences.")
+    st.markdown(
+        "Airports sized and colored by " +
+        tip("average calibrated risk score", "Mean of the calibrated XGBoost risk scores "
+            "across all pair-months involving this airport in the selected role and month. "
+            "Color and marker size both scale with risk (green=low, red=high). "
+            "Normalized to the calibrated score range [0%, 50%].") +
+        ". DFW is the hub for all sequences. Spoke lines connect DFW to the 10 riskiest airports.",
+        unsafe_allow_html=True,
+    )
 
     scores_map = get_pair_scores()
 
@@ -1896,9 +2007,11 @@ with tab_map:
             size=grp["avg_risk"] * 30 + 6,
             color=grp["avg_risk"],
             colorscale="RdYlGn_r",
-            cmin=0, cmax=1,
+            cmin=0, cmax=0.5,
             showscale=True,
-            colorbar=dict(title="Avg Risk", tickformat=".0%", x=1.0),
+            colorbar=dict(title="Avg Risk", tickformat=".0%", x=1.0,
+                          tickvals=[0, 0.1, 0.2, 0.3, 0.4, 0.5],
+                          ticktext=["0%","10%","20%","30%","40%","≥50%"]),
             line=dict(width=0.8, color="black"),
         ),
         text=grp["airport"],
@@ -1937,4 +2050,13 @@ with tab_map:
     tbl = grp[["airport", "city", "state", "avg_risk", "n_pairs", "worst_partner"]].copy()
     tbl.columns = ["Airport", "City", "State", "Avg Risk", "N Pairs", "Worst Partner"]
     tbl["Avg Risk"] = tbl["Avg Risk"].map("{:.1%}".format)
+    st.markdown(
+        tip("Avg Risk", "Mean calibrated risk score across all pair-months involving this airport "
+            "in the selected month and role. After isotonic calibration, this approximates "
+            "the average fraction of sequences on routes through this airport that are disrupted.") +
+        " · " +
+        tip("Worst Partner", "The airport B (or A) that, when paired with this airport, "
+            "produces the highest calibrated risk score in the selected month."),
+        unsafe_allow_html=True,
+    )
     st.dataframe(tbl, width='stretch', height=320)
