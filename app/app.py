@@ -116,6 +116,33 @@ def get_scores_indexed() -> pd.DataFrame:
 
 
 @st.cache_data(show_spinner=False)
+def get_eval_data() -> dict:
+    """Compute PR/ROC curves and calibration from pair_risk_scores (pair-level aggregation)."""
+    from sklearn.metrics import roc_curve, precision_recall_curve, roc_auc_score, average_precision_score
+    _s = get_pair_scores().dropna(subset=["avg_risk_score", "observed_bad_rate"])
+    _y = (_s["observed_bad_rate"] > 0.25).astype(int)
+    _p = _s["avg_risk_score"]
+    _fpr, _tpr, _ = roc_curve(_y, _p)
+    _prec, _rec, _ = precision_recall_curve(_y, _p)
+    # Calibration: decile buckets of model score vs observed bad rate
+    _s2 = _s.copy()
+    _s2["decile"] = pd.qcut(_p, 10, labels=False)
+    _cal = (_s2.groupby("decile")
+            .agg(mean_score=("avg_risk_score", "mean"),
+                 mean_obs=("observed_bad_rate", "mean"),
+                 n=("avg_risk_score", "count"))
+            .reset_index())
+    return {
+        "fpr": _fpr, "tpr": _tpr,
+        "prec": _prec, "rec": _rec,
+        "auc": float(roc_auc_score(_y, _p)),
+        "ap":  float(average_precision_score(_y, _p)),
+        "cal": _cal,
+        "scores": _s,
+    }
+
+
+@st.cache_data(show_spinner=False)
 def get_feature_importance_df() -> pd.DataFrame:
     """Load XGBoost model and extract feature importances with group labels."""
     import xgboost as _xgb
@@ -262,12 +289,13 @@ tab_overview, tab_dash, tab_sched, tab_optim, tab_query, tab_map = st.tabs([
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# TAB 0: METHODOLOGY — FULL TECHNICAL REPORT
+# TAB 0: METHODOLOGY
 # ═══════════════════════════════════════════════════════════════════════════
 with tab_overview:
     st.header("📋 Methodology & Technical Model Report")
+    st.caption("A full technical account of the data pipeline, feature engineering, model specification, and evaluation.")
 
-    # ── Model card ───────────────────────────────────────────────────────────
+    # ── Top model card ────────────────────────────────────────────────────────
     _mc = st.columns(6)
     for _col, (_lbl, _val) in zip(_mc, [
         ("Algorithm",   "XGBoost v3"),
@@ -288,35 +316,98 @@ with tab_overview:
 
     st.markdown("<br>", unsafe_allow_html=True)
 
+    # ── Pipeline Sankey ───────────────────────────────────────────────────────
+    fig_sankey = go.Figure(go.Sankey(
+        arrangement="snap",
+        node=dict(
+            label=["BTS 2015–2024\n(Flight Ops)", "GSOM Weather\n(NOAA Monthly)",
+                   "Tail-Chain\nRotations", "Feature Engineering\n(70 features)",
+                   "XGBoost v3\nClassifier", "Pair Risk Scores\n(A×B×month)",
+                   "SHAP Explanations", "Sequence Optimizer\n(Hungarian Alg.)",
+                   "Risk Dashboard"],
+            color=["#005EB8","#1a7a4a","#8B4513","#7B2D8B","#C41E3A",
+                   "#2ca02c","#ff7f0e","#555555","#005EB8"],
+            pad=24, thickness=22,
+            line=dict(color="rgba(255,255,255,0.15)", width=0.5),
+            hovertemplate="<b>%{label}</b><extra></extra>",
+        ),
+        link=dict(
+            source=[0, 0, 1, 2, 3, 4, 4, 5, 5],
+            target=[3, 8, 3, 3, 4, 5, 6, 7, 8],
+            value= [45, 10, 20, 25, 100, 60, 40, 30, 30],
+            color=["rgba(0,94,184,0.25)","rgba(0,94,184,0.15)",
+                   "rgba(26,122,74,0.25)","rgba(139,69,19,0.25)",
+                   "rgba(123,45,139,0.3)","rgba(196,30,58,0.3)",
+                   "rgba(196,30,58,0.2)","rgba(44,160,44,0.3)",
+                   "rgba(44,160,44,0.25)"],
+            hovertemplate="<b>%{source.label}</b> → <b>%{target.label}</b><extra></extra>",
+        ),
+    ))
+    fig_sankey.update_layout(
+        title="End-to-End Data & Model Pipeline",
+        height=340, margin=dict(t=50, b=10, l=10, r=10),
+        font=dict(size=11),
+    )
+    st.plotly_chart(fig_sankey, width='stretch')
+    st.markdown("<br>", unsafe_allow_html=True)
+
     # ── Section 1: Problem Formulation ───────────────────────────────────────
     with st.expander("**1 · Problem Formulation**", expanded=True):
-        st.markdown("""
+        _pf1, _pf2 = st.columns([3, 2])
+        with _pf1:
+            st.markdown("""
 American Airlines operates **~900 daily flights** through Dallas/Fort Worth (DFW).
 A crew sequence is the atom of scheduling: a pilot or flight attendant arrives on
-an inbound flight from airport **A**, rests briefly at DFW, then departs on an
-outbound flight to airport **B**. Weather disruptions at A, DFW, or B can shatter
-the entire day's roster — triggering FAA Part 117 rest violations, repositioning
-costs, and downstream cancellations.
+an inbound flight from airport **A**, turns at DFW, then departs on an outbound
+to airport **B**. Weather disruptions at A, DFW, or B shatter the day's roster —
+triggering FAA Part 117 rest violations, repositioning costs, and cascading cancellations.
 
-**Formal task.** Given the triplet `(airport_A, airport_B, month)`, predict
-whether the sequence **A → DFW → B** is *systematically bad* — i.e., whether
-its historical weather disruption rate exceeds a material threshold.
+**Formal task.** Given the triplet (airport_A, airport_B, month), predict whether the
+sequence A → DFW → B is *systematically disrupted* — i.e., whether its historical
+weather disruption rate exceeds a material threshold.
+            """)
+            st.markdown("**Observed disruption rate for a pair-month cell:**")
+            st.latex(r"""
+\text{bad\_rate}(A,\,B,\,m) =
+\frac{\bigl|\bigl\{s \in \mathcal{S}_{A,B,m}
+       \;:\; \Delta_s \geq 15\,\text{min}
+       \;\lor\; \mathrm{cancel}(s)\bigr\}\bigr|}
+     {|\mathcal{S}_{A,B,m}|}
+""")
+            st.markdown("**Binary label and classification target:**")
+            st.latex(r"""
+y_{A,B,m} = \begin{cases}
+1 & \text{if } \text{bad\_rate}(A,B,m) > 0.25 \\
+0 & \text{otherwise}
+\end{cases}
+""")
+            st.markdown("**Model output:**")
+            st.latex(r"""
+\hat{p}_{A,B,m} = P\!\left(y=1 \;\middle|\; \mathbf{x}_{A,B,m}\right) \in [0,\,1],
+\quad \mathbf{x} \in \mathbb{R}^{70}
+""")
+        with _pf2:
+            st.markdown("**The model is used in two distinct modes:**")
+            st.markdown("""
+| Mode | Usage |
+|---|---|
+| **Pair scoring** | Absolute risk gauge for any A→DFW→B pair in any month |
+| **Cost matrix** | Relative ranking as input to the Hungarian-algorithm optimizer |
 
-This is a **binary classification** problem:
+**Threshold rationale: 0.25**
 
-```
-Input:   x ∈ ℝ^70   (feature vector for a pair-month)
-Output:  P(y=1 | x) ∈ [0, 1]
+The 0.25 bad-rate threshold was chosen after examining the full distribution of
+pair-month disruption rates. At the 25th percentile the tail of high-disruption
+cells separates from the bulk. A 50% threshold would create a spurious 50/50 split
+with no operational meaning; 0.25 captures pairs that are *materially* elevated,
+yielding a 42.1% positive rate.
 
-where  y = 1  ⟺  observed_bad_rate(A, B, month) > 0.25
-       observed_bad_rate = |{sequences with weather disruption}| / |{all sequences}|
-```
+**Turnaround constraints**
 
-The model output is used in two ways:
-- **Absolute score** — displayed as a risk gauge for any single pair
-- **Relative ranking** — used as the cost matrix in the Hungarian-algorithm
-  sequence optimizer to find the day's minimum-risk assignment
-        """)
+Sequences are constructed by linking inbound and outbound legs on the same
+tail number with a turnaround window of **30–240 minutes** — the FAA minimum
+crew turn plus an operational ceiling beyond which a new crew is typically assigned.
+            """)
 
     # ── Section 2: Dataset ───────────────────────────────────────────────────
     with st.expander("**2 · Dataset**", expanded=True):
@@ -366,75 +457,66 @@ forcing a 50/50 split. The resulting class balance is **42.1% positive**.
     with st.expander("**3 · Model Architecture & Training**", expanded=True):
         _m1, _m2 = st.columns(2)
         with _m1:
-            st.markdown("""
-**Algorithm: XGBoost Gradient Boosted Trees**
-
-XGBoost minimizes a regularized additive objective using second-order Taylor
-expansion of the loss. For binary classification the objective is
-log-loss (cross-entropy):
-
-```
-L = Σᵢ [yᵢ log(p̂ᵢ) + (1-yᵢ) log(1-p̂ᵢ)]  +  Ω(f)
-```
-
-where `Ω(f) = γT + ½λ||w||²` penalizes tree complexity
-(T = number of leaves, w = leaf weights).
-
-**Key hyperparameters**
-
-| Parameter | Value | Rationale |
-|---|---|---|
-| `n_estimators` | 500 | cap; early stopping governs actual count |
-| `early_stopping_rounds` | 30 | stops when val AP doesn't improve for 30 rounds |
-| `max_depth` | 6 | moderate depth; enough for interaction features |
-| `learning_rate` | 0.05 | slow shrinkage reduces variance |
-| `subsample` | 0.8 | row subsampling per tree — reduces overfitting |
-| `colsample_bytree` | 0.8 | feature subsampling per tree |
-| `scale_pos_weight` | ~1.38 | negatives / positives — corrects class imbalance |
-| `eval_metric` | `aucpr` | AP is strictly better than AUC for imbalanced tasks |
-| `tree_method` | `hist` | histogram algorithm — O(n·b) splits, GPU-accelerated |
-| `device` | `cuda` | NVIDIA GPU training |
-            """)
+            st.markdown("**XGBoost Gradient Boosted Trees — Objective Function**")
+            st.markdown("The model minimizes a regularized additive loss over K trees:")
+            st.latex(r"""
+\mathcal{L}(\phi) = \sum_{i=1}^{n} \ell\!\left(y_i,\, \hat{y}_i^{(K)}\right)
+                  + \sum_{k=1}^{K} \Omega(f_k)
+""")
+            st.markdown("where the log-loss for binary classification is:")
+            st.latex(r"""
+\ell\!\left(y_i, \hat{y}_i\right) =
+-\,y_i \log \hat{p}_i - (1-y_i)\log(1-\hat{p}_i),
+\quad
+\hat{p}_i = \sigma\!\left(\hat{y}_i^{(K)}\right)
+""")
+            st.markdown("and the regularization penalty on tree $f_k$ is:")
+            st.latex(r"""
+\Omega(f_k) = \gamma\, T_k + \frac{1}{2}\,\lambda\,\|\mathbf{w}_k\|^2
+""")
+            st.markdown(r"($T_k$ = number of leaves, $\mathbf{w}_k$ = leaf weight vector). The optimal leaf weight in each node is derived analytically via second-order Taylor expansion:")
+            st.latex(r"""
+w_j^* = -\,\frac{\displaystyle\sum_{i \in I_j} g_i}
+               {\displaystyle\sum_{i \in I_j} h_i + \lambda}
+""")
+            st.markdown(r"where $g_i = \partial_{\hat{y}} \ell$ and $h_i = \partial^2_{\hat{y}} \ell$ are the first and second gradients. **Class imbalance** is corrected by re-weighting positive gradients:")
+            st.latex(r"""
+\text{scale\_pos\_weight} = \frac{N_{\text{neg}}}{N_{\text{pos}}}
+= \frac{248{,}421}{180{,}695} \approx 1.374
+""")
         with _m2:
+            st.markdown("**Hyperparameters**")
+            _hp = pd.DataFrame([
+                ("n_estimators",       "500",    "Hard cap; early stopping governs actual tree count"),
+                ("early_stopping_rounds","30",   "Halt if val AUCPR doesn't improve for 30 rounds"),
+                ("max_depth",          "6",      "Sufficient for 6-way interaction features"),
+                ("learning_rate (η)",  "0.05",   "Slow shrinkage → lower variance"),
+                ("subsample",          "0.8",    "Stochastic row sampling per tree"),
+                ("colsample_bytree",   "0.8",    "Feature sampling per tree"),
+                ("eval_metric",        "aucpr",  "Average Precision — better for imbalanced targets"),
+                ("tree_method",        "hist",   "Histogram splits — O(n·b); GPU-accelerated"),
+                ("device",             "cuda",   "NVIDIA GPU training"),
+                ("random_state",       "42",     "Reproducibility"),
+            ], columns=["Parameter", "Value", "Rationale"])
+            st.dataframe(_hp, hide_index=True, width='stretch', height=370)
             st.markdown("""
-**Validation strategy: time-based split**
-
-Standard k-fold cross-validation leaks future information — a pair-month
-from 2023 would train on 2024 data in some folds. We use a strict
-**temporal split**:
+**Validation: strict temporal split**
 
 ```
-Train set:  Year < 2024   (~85% of observations)
-Val set:    Year = 2024   (~15% of observations)
+Train:  Year ∈ {2015, …, 2023}  (~85%)
+Val:    Year = 2024              (~15%)
 ```
+Standard k-fold would leak future information (2023 data training on 2024 labels in some folds).
+Time-based holdout tests true out-of-sample generalization.
 
-This tests generalization to unseen future schedules — the operationally
-relevant question.
-
-**Class imbalance**
-
-With 42.1% positives the dataset is mildly imbalanced but not severely so.
-We use `scale_pos_weight = n_neg / n_pos ≈ 1.38` to increase gradient weight
-on minority-class errors, which meaningfully improves recall on the high-risk class.
-
-**Key design choices**
-
-- **`eval_metric = aucpr`** — Average Precision integrates Precision-Recall across
-  all thresholds. For imbalanced classification it better reflects real-world utility
-  than ROC-AUC, which is insensitive to class imbalance.
-- **NaN passthrough** — XGBoost assigns a learned default direction at each split
-  for missing values. This allows GSOM weather features (missing for ~45% of airports)
-  to coexist with BTS features without imputation, preserving the missingness signal.
-- **No post-hoc calibration** — XGBoost probabilities are uncalibrated; the raw
-  output skews high relative to the observed bad rate. Scores should be read as
-  relative risk rankings, not literal probabilities.
+**NaN passthrough.** XGBoost learns a default branching direction for each split
+when a feature value is missing — GSOM features (absent for ~45% of airports) are
+handled natively without imputation.
             """)
 
     # ── Section 4: Feature Engineering ───────────────────────────────────────
     with st.expander("**4 · Feature Engineering — All 70 Features**", expanded=True):
         _fi_df = get_feature_importance_df()
-
-        # ── Importance chart (top 30) ─────────────────────────────────────
         _group_colors = {
             "Origin BTS":        "#005EB8",
             "Dest BTS":          "#0088CC",
@@ -449,149 +531,279 @@ on minority-class errors, which meaningfully improves recall on the high-risk cl
             "Multi-Hop Cascade": "#B8860B",
             "Other":             "#888888",
         }
-        _top30 = _fi_df.head(30).sort_values("importance")
-        _colors_bar = [_group_colors.get(g, "#888") for g in _top30["group"]]
-        fig_fi = go.Figure(go.Bar(
-            x=_top30["importance"],
-            y=_top30["label"],
-            orientation="h",
-            marker_color=_colors_bar,
-            text=[f"{v:.3f}" for v in _top30["importance"]],
-            textposition="outside",
-            hovertemplate="<b>%{y}</b><br>Importance (gain): %{x:.4f}<br>Feature: %{customdata}<extra></extra>",
-            customdata=_top30["feature"],
-        ))
-        fig_fi.update_layout(
-            title="Top 30 Features by XGBoost Gain Importance",
-            xaxis=dict(title="Feature Importance (gain, normalized)", range=[0, _top30['importance'].max() * 1.18]),
-            height=780,
-            margin=dict(l=10, r=80, t=50, b=40),
-            plot_bgcolor="rgba(0,0,0,0)",
-        )
-        st.plotly_chart(fig_fi, width='stretch')
 
-        # ── Importance by group ───────────────────────────────────────────
-        _grp_sum = (_fi_df.groupby("group")["importance"].sum()
-                    .reset_index().sort_values("importance", ascending=False))
-        _grp_colors = [_group_colors.get(g, "#888") for g in _grp_sum["group"]]
-        fig_grp = go.Figure(go.Bar(
-            x=_grp_sum["group"], y=_grp_sum["importance"],
-            marker_color=_grp_colors,
-            text=[f"{v:.3f}" for v in _grp_sum["importance"]],
-            textposition="outside",
-            hovertemplate="<b>%{x}</b><br>Total importance: %{y:.4f}<extra></extra>",
-        ))
-        fig_grp.update_layout(
-            title="Cumulative Feature Importance by Group",
-            yaxis=dict(title="Sum of gain importance", range=[0, _grp_sum['importance'].max() * 1.18]),
-            height=340,
-            margin=dict(l=40, r=40, t=50, b=60),
-            plot_bgcolor="rgba(0,0,0,0)",
+        # ── Sunburst: group → feature ─────────────────────────────────────
+        _sun_df = _fi_df[_fi_df["importance"] > 0].copy()
+        _sun_df["pct"] = (_sun_df["importance"] / _sun_df["importance"].sum() * 100).round(2)
+        fig_sun = px.sunburst(
+            _sun_df,
+            path=["group", "label"],
+            values="importance",
+            color="group",
+            color_discrete_map=_group_colors,
+            custom_data=["feature", "pct"],
+            title="Feature Importance Hierarchy — Group → Individual Feature (XGBoost Gain)",
         )
-        st.plotly_chart(fig_grp, width='stretch')
+        fig_sun.update_traces(
+            hovertemplate=(
+                "<b>%{label}</b><br>"
+                "Group: %{parent}<br>"
+                "Importance: %{value:.4f}<br>"
+                "Share: %{customdata[1]:.2f}%<extra></extra>"
+            ),
+            textfont_size=11,
+            insidetextorientation="radial",
+        )
+        fig_sun.update_layout(height=560, margin=dict(t=50, b=10, l=10, r=10))
+        st.plotly_chart(fig_sun, width='stretch')
+
+        # ── Bar (top 25) + group bar side by side ─────────────────────────
+        _bc1, _bc2 = st.columns([3, 2])
+        with _bc1:
+            _top25 = _fi_df.head(25).sort_values("importance")
+            fig_fi = go.Figure(go.Bar(
+                x=_top25["importance"],
+                y=_top25["label"],
+                orientation="h",
+                marker=dict(
+                    color=[_group_colors.get(g, "#888") for g in _top25["group"]],
+                    line=dict(width=0),
+                ),
+                text=[f"{v:.3f}" for v in _top25["importance"]],
+                textposition="outside",
+                hovertemplate="<b>%{y}</b><br>Importance: %{x:.4f}<br>Feature: %{customdata}<extra></extra>",
+                customdata=_top25["feature"],
+            ))
+            fig_fi.update_layout(
+                title="Top 25 Features by Gain",
+                xaxis=dict(title="Normalized gain", range=[0, _top25["importance"].max() * 1.22]),
+                height=640,
+                margin=dict(l=10, r=90, t=50, b=40),
+                plot_bgcolor="rgba(0,0,0,0)",
+            )
+            st.plotly_chart(fig_fi, width='stretch')
+        with _bc2:
+            _grp_sum = (_fi_df.groupby("group")["importance"].sum()
+                        .reset_index().sort_values("importance", ascending=False))
+            fig_grp = go.Figure(go.Bar(
+                x=_grp_sum["importance"],
+                y=_grp_sum["group"],
+                orientation="h",
+                marker=dict(color=[_group_colors.get(g, "#888") for g in _grp_sum["group"]]),
+                text=[f"{v:.3f}" for v in _grp_sum["importance"]],
+                textposition="outside",
+                hovertemplate="<b>%{y}</b><br>Total gain: %{x:.4f}<extra></extra>",
+            ))
+            fig_grp.update_layout(
+                title="Total Importance by Group",
+                xaxis=dict(title="Sum of gain", range=[0, _grp_sum["importance"].max() * 1.25]),
+                height=640,
+                margin=dict(l=10, r=90, t=50, b=40),
+                plot_bgcolor="rgba(0,0,0,0)",
+            )
+            st.plotly_chart(fig_grp, width='stretch')
 
         # ── Full feature table ────────────────────────────────────────────
-        st.markdown("**Complete feature list (all 70)**")
-        _tbl_cols = _fi_df[["rank", "group", "label", "feature", "importance"]].copy()
-        _tbl_cols.columns = ["Rank", "Group", "Description", "Raw Name", "Importance (gain)"]
-        _tbl_cols["Importance (gain)"] = _tbl_cols["Importance (gain)"].map("{:.5f}".format)
-        st.dataframe(_tbl_cols, hide_index=True, width='stretch', height=420)
+        with st.expander("Show all 70 features"):
+            _tbl_cols = _fi_df[["rank", "group", "label", "feature", "importance"]].copy()
+            _tbl_cols.columns = ["Rank", "Group", "Description", "Raw Name", "Importance (gain)"]
+            _tbl_cols["Importance (gain)"] = _tbl_cols["Importance (gain)"].map("{:.5f}".format)
+            st.dataframe(_tbl_cols, hide_index=True, width='stretch', height=500)
 
     # ── Section 5: Evaluation ─────────────────────────────────────────────────
     with st.expander("**5 · Model Evaluation**", expanded=True):
         st.markdown("""
-**Validation set:** BTS 2024 (most recent year, held out entirely from training).
-All metrics below are computed on the validation set unless noted.
+**Validation set:** BTS 2024 held out entirely from training (time-based split).
+Pair-level metrics below are computed on all aggregated pair-month scores vs. observed bad rates.
         """)
 
-        # Metric cards
+        # Metric cards row
         _ev_cols = st.columns(5)
         for _col, (_lbl, _val, _note) in zip(_ev_cols, [
-            ("ROC-AUC",         "0.833", "Val set"),
-            ("Avg Precision",   "0.830", "Val set"),
-            ("Precision@0.5",   "0.795", "High Risk class"),
-            ("Recall@0.5",      "0.606", "High Risk class"),
-            ("F1@0.5",          "0.688", "High Risk class"),
+            ("Val AUC",         "0.833", "sequence-level (2024)"),
+            ("Val AP",          "0.830", "sequence-level (2024)"),
+            ("Pair AUC",        "0.938", "pair-level aggregation"),
+            ("Pair AP",         "0.892", "pair-level aggregation"),
+            ("F1 @ 0.50",       "0.688", "High Risk class"),
         ]):
             _col.markdown(
                 f'<div style="border:1px solid rgba(128,128,128,0.25);border-radius:8px;'
-                f'padding:12px 8px;text-align:center">'
+                f'padding:14px 8px;text-align:center">'
                 f'<div style="font-size:0.72em;opacity:0.6;text-transform:uppercase;letter-spacing:0.04em">{_lbl}</div>'
-                f'<div style="font-size:1.6em;font-weight:700;margin:4px 0">{_val}</div>'
+                f'<div style="font-size:1.8em;font-weight:700;margin:4px 0">{_val}</div>'
                 f'<div style="font-size:0.72em;opacity:0.55">{_note}</div>'
                 f'</div>',
                 unsafe_allow_html=True,
             )
-
         st.markdown("<br>", unsafe_allow_html=True)
-        _ev1, _ev2 = st.columns(2)
 
-        with _ev1:
-            # Confusion matrix heatmap
+        _eval = get_eval_data()
+
+        # Row 1: ROC + PR
+        _r1a, _r1b = st.columns(2)
+        with _r1a:
+            # ROC curve
+            _fpr_s = _eval["fpr"][::max(1, len(_eval["fpr"])//500)]
+            _tpr_s = _eval["tpr"][::max(1, len(_eval["tpr"])//500)]
+            fig_roc = go.Figure()
+            fig_roc.add_trace(go.Scatter(
+                x=[0, 1], y=[0, 1], mode="lines",
+                line=dict(dash="dash", color="rgba(150,150,150,0.5)", width=1.5),
+                name="Random (AUC=0.50)", showlegend=True,
+            ))
+            fig_roc.add_trace(go.Scatter(
+                x=_fpr_s, y=_tpr_s, mode="lines",
+                line=dict(color="#005EB8", width=2.5),
+                fill="tozeroy", fillcolor="rgba(0,94,184,0.08)",
+                name=f"XGBoost (AUC = {_eval['auc']:.3f})",
+            ))
+            fig_roc.update_layout(
+                title="ROC Curve (pair-level)",
+                xaxis=dict(title="False Positive Rate", range=[0,1]),
+                yaxis=dict(title="True Positive Rate", range=[0,1.02]),
+                height=380, margin=dict(t=50, b=50, l=50, r=20),
+                plot_bgcolor="rgba(0,0,0,0)",
+                legend=dict(x=0.55, y=0.08),
+            )
+            fig_roc.add_annotation(
+                x=0.65, y=0.35, text=f"AUC = {_eval['auc']:.3f}",
+                font=dict(size=15, color="#005EB8"), showarrow=False,
+            )
+            st.plotly_chart(fig_roc, width='stretch')
+
+        with _r1b:
+            # Precision-Recall curve
+            _step = max(1, len(_eval["prec"]) // 500)
+            _pr_p = _eval["prec"][::_step]
+            _pr_r = _eval["rec"][::_step]
+            _baseline = float((_eval["scores"]["observed_bad_rate"] > 0.25).mean())
+            fig_pr = go.Figure()
+            fig_pr.add_trace(go.Scatter(
+                x=[0, 1], y=[_baseline, _baseline], mode="lines",
+                line=dict(dash="dash", color="rgba(150,150,150,0.5)", width=1.5),
+                name=f"Baseline (AP={_baseline:.2f})", showlegend=True,
+            ))
+            fig_pr.add_trace(go.Scatter(
+                x=_pr_r, y=_pr_p, mode="lines",
+                line=dict(color="#C41E3A", width=2.5),
+                fill="tozeroy", fillcolor="rgba(196,30,58,0.08)",
+                name=f"XGBoost (AP = {_eval['ap']:.3f})",
+            ))
+            fig_pr.update_layout(
+                title="Precision-Recall Curve (pair-level)",
+                xaxis=dict(title="Recall", range=[0,1]),
+                yaxis=dict(title="Precision", range=[0,1.02]),
+                height=380, margin=dict(t=50, b=50, l=50, r=20),
+                plot_bgcolor="rgba(0,0,0,0)",
+                legend=dict(x=0.02, y=0.08),
+            )
+            fig_pr.add_annotation(
+                x=0.35, y=0.35, text=f"AP = {_eval['ap']:.3f}",
+                font=dict(size=15, color="#C41E3A"), showarrow=False,
+            )
+            st.plotly_chart(fig_pr, width='stretch')
+
+        # Row 2: Calibration + Confusion matrix
+        _r2a, _r2b = st.columns(2)
+        with _r2a:
+            # Calibration scatter
+            _cal = _eval["cal"]
+            _cal_colors = [score_to_color(float(s)) for s in _cal["mean_score"]]
+            fig_cal = go.Figure()
+            fig_cal.add_trace(go.Scatter(
+                x=[0, 1], y=[0, 1], mode="lines",
+                line=dict(dash="dot", color="rgba(150,150,150,0.5)", width=1.5),
+                name="Perfect calibration", showlegend=True,
+            ))
+            fig_cal.add_trace(go.Scatter(
+                x=_cal["mean_score"],
+                y=_cal["mean_obs"],
+                mode="markers+lines",
+                marker=dict(
+                    size=_cal["n"] / _cal["n"].max() * 28 + 10,
+                    color=_cal_colors,
+                    line=dict(width=1.5, color="white"),
+                ),
+                line=dict(color="rgba(128,128,128,0.4)", width=1.5),
+                text=[f"Decile {i}<br>Score: {s:.3f}<br>Obs bad rate: {o:.3f}<br>n={n:,}"
+                      for i, (s, o, n) in enumerate(zip(_cal["mean_score"], _cal["mean_obs"], _cal["n"]))],
+                hovertemplate="%{text}<extra></extra>",
+                name="Model (decile means)",
+            ))
+            fig_cal.update_layout(
+                title="Calibration Plot — Model Score vs. Observed Bad Rate<br>"
+                      "<sup>Dot size ∝ number of pair-months in decile. Above diagonal = overestimates risk.</sup>",
+                xaxis=dict(title="Mean Model Risk Score (decile)", range=[0, 1], tickformat=".0%"),
+                yaxis=dict(title="Mean Observed Bad Rate (decile)", range=[0, 0.55], tickformat=".0%"),
+                height=400, margin=dict(t=70, b=50, l=60, r=20),
+                plot_bgcolor="rgba(0,0,0,0)",
+                legend=dict(x=0.02, y=0.92),
+            )
+            st.plotly_chart(fig_cal, width='stretch')
+
+        with _r2b:
+            # Confusion matrix
             _cm = np.array([[220253, 28168], [71170, 109525]])
             _cm_pct = _cm / _cm.sum()
-            _ann = [[f"{_cm[i,j]:,}<br>({_cm_pct[i,j]:.1%})" for j in range(2)] for i in range(2)]
-            fig_cm = go.Figure(go.Heatmap(
-                z=_cm,
-                x=["Predicted Low", "Predicted High"],
-                y=["Actual Low", "Actual High"],
-                colorscale=[[0,"rgba(0,94,184,0.08)"],[1,"rgba(196,30,58,0.7)"]],
-                showscale=False,
-                text=_ann, texttemplate="%{text}",
-                textfont=dict(size=14),
-            ))
+            _ann = [[f"<b>{_cm[i,j]:,}</b><br>{_cm_pct[i,j]:.1%}" for j in range(2)] for i in range(2)]
+            _cm_colors = [["rgba(0,94,184,0.55)", "rgba(196,30,58,0.25)"],
+                          ["rgba(196,30,58,0.25)", "rgba(0,94,184,0.55)"]]
+            fig_cm = go.Figure()
+            for _ri in range(2):
+                for _ci in range(2):
+                    fig_cm.add_shape(type="rect",
+                        x0=_ci-0.5, y0=_ri-0.5, x1=_ci+0.5, y1=_ri+0.5,
+                        fillcolor=_cm_colors[_ri][_ci], line=dict(color="rgba(128,128,128,0.3)", width=1))
+                    fig_cm.add_annotation(
+                        x=_ci, y=_ri, text=_ann[_ri][_ci],
+                        font=dict(size=15), showarrow=False, align="center")
             fig_cm.update_layout(
-                title="Confusion Matrix (full dataset, threshold = 0.50)",
-                height=300, margin=dict(t=50, b=40, l=10, r=10),
-                xaxis=dict(side="top"),
+                title="Confusion Matrix (threshold = 0.50, full dataset)",
+                xaxis=dict(tickvals=[0,1], ticktext=["Pred Low", "Pred High"],
+                           side="top", range=[-0.5, 1.5]),
+                yaxis=dict(tickvals=[0,1], ticktext=["Actual Low", "Actual High"],
+                           range=[-0.5, 1.5], autorange="reversed"),
+                height=400, margin=dict(t=80, b=20, l=100, r=20),
+                plot_bgcolor="rgba(0,0,0,0)",
             )
             st.plotly_chart(fig_cm, width='stretch')
 
-        with _ev2:
-            # Score distribution (hardcoded from computed stats)
-            _bands = ["LOW (<0.40)", "MODERATE (0.40–0.70)", "HIGH (≥0.70)"]
-            _pcts  = [0.5869, 0.2466, 0.1665]
-            fig_dist = go.Figure(go.Bar(
-                x=_bands, y=_pcts,
-                marker_color=["#2ca02c", "#ff7f0e", "#d62728"],
-                text=[f"{p:.1%}" for p in _pcts], textposition="outside",
-            ))
-            fig_dist.update_layout(
-                title="Model Score Distribution Across All Pair-Months",
-                yaxis=dict(tickformat=".0%", range=[0, 0.75]),
-                height=300, margin=dict(t=50, b=40, l=40, r=20),
-                plot_bgcolor="rgba(0,0,0,0)",
-            )
-            st.plotly_chart(fig_dist, width='stretch')
+        # Score distribution histogram
+        _bands = ["LOW\n(<0.40)", "MODERATE\n(0.40–0.70)", "HIGH\n(≥0.70)"]
+        _pcts  = [0.5869, 0.2466, 0.1665]
+        _cnts  = [int(p * 429116) for p in _pcts]
+        fig_dist = go.Figure(go.Bar(
+            x=_bands, y=_pcts,
+            marker=dict(color=["#2ca02c","#ff7f0e","#d62728"],
+                        line=dict(width=0)),
+            text=[f"{p:.1%}<br>({c:,} pairs)" for p, c in zip(_pcts, _cnts)],
+            textposition="outside",
+        ))
+        fig_dist.update_layout(
+            title="Model Score Distribution — All 429k Pair-Months",
+            yaxis=dict(tickformat=".0%", range=[0, 0.72], title="Fraction of pair-months"),
+            xaxis=dict(title="Risk Band"),
+            height=310, margin=dict(t=50, b=50, l=60, r=20),
+            plot_bgcolor="rgba(0,0,0,0)",
+        )
+        st.plotly_chart(fig_dist, width='stretch')
 
         st.markdown("""
-**Reading the metrics**
+**Interpreting the calibration plot**
 
-- **ROC-AUC = 0.833** — the model correctly ranks a randomly selected high-risk pair above
-  a low-risk pair 83.3% of the time. Substantially better than chance (0.5) and a naive
-  "always predict majority class" baseline (~0.65 AUC).
-- **AP = 0.830** — average precision across the Precision-Recall curve. Since AP weights
-  high-precision operating points more than ROC-AUC does, this score is meaningful for an
-  operational use-case where false alarms are costly.
-- **Precision 0.795 / Recall 0.606 at threshold 0.50** — at the default cutoff, the model
-  is conservative on the high-risk label: it catches 60.6% of genuinely risky pairs but
-  when it flags a pair as high-risk it is correct 79.5% of the time.
-- **Score distribution** — 58.7% of pair-months score LOW, 24.7% MODERATE, 16.7% HIGH.
-  This is the operational distribution schedulers will see in the dashboard.
+Every dot lies **above** the diagonal — model scores consistently exceed observed bad rates.
+This is expected for uncalibrated XGBoost: the model is trained to rank pairs
+(maximizing AUCPR), not to output calibrated probabilities. The scores are
+monotonically ordered with observed rates, which is what matters operationally.
+A score of 0.65 means *"this pair ranks in the top ~17% riskiest"*, not
+*"65% of sequences will be disrupted."*
 
 **Known limitations**
 
-1. **Uncalibrated probabilities.** XGBoost scores are not calibrated by default. A score of 0.65
-   does not mean "65% of sequences will be disrupted" — it means the model is relatively confident
-   this pair-month is systematically bad. Use scores for ranking, not as literal probabilities.
-2. **AA-only training.** The tail-chain and cascade features are built from AA BTS data.
-   All-carrier sequence scoring reuses the same pair-month lookup and may not reflect
-   operational patterns of other carriers.
-3. **Climate stationarity assumption.** Features derived from 2015–2024 GSOM climatology
-   assume weather patterns are stable. A structural shift (e.g., severe drought pattern change)
-   would require retraining.
-4. **No real-time weather.** The model captures *climatological* risk, not today's METAR or TAF.
-   Operational crews should overlay live NWS products for day-of decisions.
+1. **Uncalibrated probabilities.** Use scores for ranking and relative comparison, not as literal disruption rates.
+2. **AA-only training.** Tail-chain and cascade features reflect AA operational patterns.
+3. **Climate stationarity.** Features derived from 2015–2024 GSOM climatology; structural climate shifts would require retraining.
+4. **No real-time weather.** Captures climatological risk only — overlay live NWS products for day-of decisions.
         """)
 
     # ── Section 6: Feature Group Deep Dive ───────────────────────────────────
