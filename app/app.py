@@ -317,35 +317,39 @@ with tab_overview:
     st.markdown("<br>", unsafe_allow_html=True)
 
     # ── Pipeline Sankey ───────────────────────────────────────────────────────
+    # Node indices:
+    #  0 BTS 2015-2024   1 GSOM Weather   2 Tail-Chain   3 Feature Eng
+    #  4 XGBoost         5 Pair Risk Scores  6 SHAP       7 Optimizer  8 Dashboard
     fig_sankey = go.Figure(go.Sankey(
-        arrangement="snap",
+        arrangement="fixed",
         node=dict(
-            label=["BTS 2015–2024\n(Flight Ops)", "GSOM Weather\n(NOAA Monthly)",
-                   "Tail-Chain\nRotations", "Feature Engineering\n(70 features)",
-                   "XGBoost v3\nClassifier", "Pair Risk Scores\n(A×B×month)",
-                   "SHAP Explanations", "Sequence Optimizer\n(Hungarian Alg.)",
+            label=["BTS 2015–2024<br>(Flight Ops)", "GSOM Weather<br>(NOAA Monthly)",
+                   "Tail-Chain<br>Rotations", "Feature Engineering<br>(70 features)",
+                   "XGBoost v3<br>Classifier", "Pair Risk Scores<br>(A×B×month)",
+                   "SHAP<br>Explanations", "Sequence Optimizer<br>(Hungarian Alg.)",
                    "Risk Dashboard"],
+            # x: column position  y: vertical position (both 0–1, but Plotly clamps to (0.001, 0.999))
+            x=[0.01, 0.01, 0.01,  0.35, 0.58,  0.80, 0.80,  0.999, 0.999],
+            y=[0.10, 0.45, 0.82,  0.44, 0.44,  0.14, 0.76,  0.20,  0.78],
             color=["#005EB8","#1a7a4a","#8B4513","#7B2D8B","#C41E3A",
                    "#2ca02c","#ff7f0e","#555555","#005EB8"],
-            pad=24, thickness=22,
+            pad=20, thickness=20,
             line=dict(color="rgba(255,255,255,0.15)", width=0.5),
             hovertemplate="<b>%{label}</b><extra></extra>",
         ),
         link=dict(
-            source=[0, 0, 1, 2, 3, 4, 4, 5, 5],
-            target=[3, 8, 3, 3, 4, 5, 6, 7, 8],
-            value= [45, 10, 20, 25, 100, 60, 40, 30, 30],
-            color=["rgba(0,94,184,0.25)","rgba(0,94,184,0.15)",
-                   "rgba(26,122,74,0.25)","rgba(139,69,19,0.25)",
-                   "rgba(123,45,139,0.3)","rgba(196,30,58,0.3)",
-                   "rgba(196,30,58,0.2)","rgba(44,160,44,0.3)",
-                   "rgba(44,160,44,0.25)"],
+            source=[0, 1, 2,  3,  4, 4,  5, 5],
+            target=[3, 3, 3,  4,  5, 6,  7, 8],
+            value= [45,20,25, 90, 55,35, 28,28],
+            color=["rgba(0,94,184,0.25)","rgba(26,122,74,0.25)","rgba(139,69,19,0.25)",
+                   "rgba(123,45,139,0.3)","rgba(196,30,58,0.3)","rgba(196,30,58,0.2)",
+                   "rgba(44,160,44,0.3)","rgba(44,160,44,0.25)"],
             hovertemplate="<b>%{source.label}</b> → <b>%{target.label}</b><extra></extra>",
         ),
     ))
     fig_sankey.update_layout(
         title="End-to-End Data & Model Pipeline",
-        height=340, margin=dict(t=50, b=10, l=10, r=10),
+        height=380, margin=dict(t=50, b=20, l=10, r=10),
         font=dict(size=11),
     )
     st.plotly_chart(fig_sankey, width='stretch')
@@ -732,9 +736,11 @@ Pair-level metrics below are computed on all aggregated pair-month scores vs. ob
             ))
             fig_cal.update_layout(
                 title="Calibration Plot — Model Score vs. Observed Bad Rate<br>"
-                      "<sup>Dot size ∝ number of pair-months in decile. Above diagonal = overestimates risk.</sup>",
-                xaxis=dict(title="Mean Model Risk Score (decile)", range=[0, 1], tickformat=".0%"),
-                yaxis=dict(title="Mean Observed Bad Rate (decile)", range=[0, 0.55], tickformat=".0%"),
+                      "<sup>Dot size ∝ number of pair-months in decile. Above diagonal = model overestimates.</sup>",
+                xaxis=dict(title="Mean Model Risk Score (decile)", range=[0, 1],
+                           tickformat=".0%", tickvals=[0, 0.25, 0.5, 0.75, 1.0]),
+                yaxis=dict(title="Mean Observed Bad Rate (decile)", range=[0, 1],
+                           tickformat=".0%", tickvals=[0, 0.25, 0.5, 0.75, 1.0]),
                 height=400, margin=dict(t=70, b=50, l=60, r=20),
                 plot_bgcolor="rgba(0,0,0,0)",
                 legend=dict(x=0.02, y=0.92),
