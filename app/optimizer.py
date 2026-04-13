@@ -192,8 +192,8 @@ def aviationstack_to_arrivals(raw: list[dict], start_h: int, end_h: int) -> pd.D
     from datetime import datetime, timezone as _tz
     rows = []
     for f in raw:
-        arr = f.get("arrival", {})
-        dep = f.get("departure", {})
+        arr = f.get("arrival") or {}
+        dep = f.get("departure") or {}
         origin = dep.get("iata")
         if not origin or origin == "DFW":
             continue
@@ -208,13 +208,13 @@ def aviationstack_to_arrivals(raw: list[dict], start_h: int, end_h: int) -> pd.D
             continue
         if not (start_h * 60 <= t_min < end_h * 60):
             continue
-        flt = f.get("flight", {})
+        flt = f.get("flight") or {}
         rows.append({
             "airport":     origin,
             "time_min":    t_min,
             "time_str":    t_str,
             "flight":      flt.get("iata", "AA?"),
-            "Tail_Number": f.get("aircraft", {}).get("registration", ""),
+            "Tail_Number": (f.get("aircraft") or {}).get("registration", ""),
         })
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
@@ -224,8 +224,8 @@ def aviationstack_to_departures(raw: list[dict], start_h: int, end_h: int) -> pd
     from datetime import datetime
     rows = []
     for f in raw:
-        dep_info = f.get("departure", {})
-        arr_info = f.get("arrival", {})
+        dep_info = f.get("departure") or {}
+        arr_info = f.get("arrival") or {}
         dest = arr_info.get("iata")
         if not dest or dest == "DFW":
             continue
@@ -245,6 +245,6 @@ def aviationstack_to_departures(raw: list[dict], start_h: int, end_h: int) -> pd
             "time_min":    t_min,
             "time_str":    t_str,
             "flight":      flt.get("iata", "AA?"),
-            "Tail_Number": f.get("aircraft", {}).get("registration", ""),
+            "Tail_Number": (f.get("aircraft") or {}).get("registration", ""),
         })
     return pd.DataFrame(rows) if rows else pd.DataFrame()
