@@ -14,17 +14,36 @@ Tracks all trained model versions, their evaluation conditions, and artifacts.
 
 | Model | File | Val AUC | Val AP | Thresh | Features | Date |
 |-------|------|---------|--------|--------|----------|------|
-| **XGBoost v3** | `xgb_model.json` | **0.833** | 0.830 | 0.25 | BTS+GSOM+DFW+tail-chain+cascade+mhc | 2026-04-12 |
+| **XGBoost v7** | `xgb_model.json` | **0.825** | 0.445 | 0.25 | BTS+GSOM+DFW+tail-chain+cascade+mhc (tail-matched seqs) | 2026-04-13 |
 | **LGBM duty v5** | `lgbm_duty_model.txt` | **0.815** | 0.844 | 0.25 | BTS+GSOM+DFW+duty+tail-chain+cascade+mhc | 2026-04-12 |
 
-> LGBM duty v5 is the primary model for the report (covers all 4 challenge objectives + pilot proxy + cascade chain).
-> XGBoost v3 is the baseline comparison (full feature parity with LGBM, higher AUC).
+> XGBoost v7 is trained on tail-matched sequences (398k obs, 11.4% positive rate, calibrated 1.2–58.3%).
+> LGBM duty v5 is the prior version (corridor-day model, 42% positive, not yet rebuilt on tail-matched data).
 
 ---
 
 ## Full Version History
 
-### v6 (XGBoost) — 2026-04-12 (current XGB)
+### v7 (XGBoost) — 2026-04-13 (current XGB)
+
+**Key change:** Rebuilt sequence_features.parquet using tail-matched aircraft rotations
+instead of corridor-day cross-join. Each row now represents a real A→DFW→B rotation
+on the same tail number, same date, 30–240 min turn.
+
+| Metric | Value |
+|--------|-------|
+| Val AUC | 0.825 |
+| Val AP | 0.445 |
+| Positive rate | 11.4% (vs 42.1% before) |
+| scale_pos_weight | 7.73 |
+| Training rows | 398,098 |
+| Calibration | Isotonic, 309 breakpoints, fitted on full dataset |
+| Calibrated range | 1.2% – 58.3% (≈ observed bad rate) |
+| MCO→LAX June | calibrated 9.7%, observed 11.6% |
+
+---
+
+### v6 (XGBoost) — 2026-04-12
 
 **Changes from XGB v2:**
 - Added all features previously LGBM-only: tail-chain (16), airport cascade (8), multi-hop DFW cascade (9)

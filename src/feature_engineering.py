@@ -136,63 +136,68 @@ def _parse_hhmm(series: pd.Series) -> pd.Series:
 
 def build_sequences(df: pd.DataFrame) -> pd.DataFrame:
     """
-    Build (airport_A, airport_B, date) aggregates without materializing
-    flight-level pairs. For each date, collapse inbound flights to unique
-    origins and outbound to unique destinations, then cross-join the airport
-    aggregates (~100 unique origins × ~100 unique destinations = ~10k rows/day)
-    instead of flight-level pairs (~400 × ~400 = 160k rows/day).
+    Build ACTUAL crew sequences by matching inbound and outbound legs on the
+    same Tail_Number on the same FlightDate within the turnaround window.
+
+    This gives one row per real aircraft rotation (A→DFW→B on the same tail),
+    not one row per (airport, date) coexistence. Key differences vs. old approach:
+    - n_sequences = actual matched rotations (~2–10 per pair per month), not calendar days
+    - Labels based on that specific flight's delays, not worst-case across all flights
+    - No size bias: large airports don't get inflated bad rates from having many flights
     """
+    WEATHER_THRESHOLD = WEATHER_DELAY_THRESHOLD_MIN
+
+    # Use actual times; fall back to scheduled if actual is missing
     inbound  = df[(df["Dest"] == "DFW") & (df["Cancelled"] != 1)].copy()
     outbound = df[(df["Origin"] == "DFW") & (df["Cancelled"] != 1)].copy()
 
-    inbound["arr_min"]  = _parse_hhmm(inbound["ArrTime"])
-    outbound["dep_min"] = _parse_hhmm(outbound["DepTime"])
+    # Prefer actual times; fill with CRS times where actual is missing
+    def _actual_or_crs(actual_col: str, crs_col: str, frame: pd.DataFrame) -> pd.Series:
+        actual = pd.to_numeric(frame[actual_col], errors="coerce")
+        crs    = pd.to_numeric(frame[crs_col],    errors="coerce")
+        return actual.fillna(crs)
 
-    # Aggregate inbound flights to (date, airport_A): worst-case weather outcomes
-    ib_agg = (
-        inbound.groupby(["FlightDate", "Origin", "Month", "Season", "Year"])
-        .agg(
-            arr_min_earliest = ("arr_min",          "min"),
-            arr_min_latest   = ("arr_min",          "max"),
-            weather_delay_A  = ("WeatherDelay",     lambda x: x.fillna(0).max()),
-            arr_delay_A      = ("ArrDelay",         lambda x: x.fillna(0).max()),
-            nas_delay_A      = ("NASDelay",         lambda x: x.fillna(0).max()),
-            late_aircraft_A  = ("LateAircraftDelay",lambda x: x.fillna(0).max()),
-        )
-        .reset_index()
-        .rename(columns={"Origin": "airport_A"})
+    inbound["arr_min"]  = _parse_hhmm(_actual_or_crs("ArrTime",  "CRSArrTime",  inbound))
+    outbound["dep_min"] = _parse_hhmm(_actual_or_crs("DepTime",  "CRSDepTime",  outbound))
+
+    # Drop rows where we couldn't determine a time
+    inbound  = inbound.dropna(subset=["arr_min"])
+    outbound = outbound.dropna(subset=["dep_min"])
+
+    # Select columns for merge
+    ib_cols = ["FlightDate", "Month", "Year", "Season", "Tail_Number",
+               "Origin", "arr_min",
+               "WeatherDelay", "ArrDelay", "NASDelay", "LateAircraftDelay"]
+    ob_cols = ["FlightDate", "Tail_Number", "Dest", "dep_min",
+               "WeatherDelay", "DepDelay", "LateAircraftDelay"]
+
+    ib = inbound[[c for c in ib_cols if c in inbound.columns]].copy()
+    ob = outbound[[c for c in ob_cols if c in outbound.columns]].copy()
+
+    # Rename flight-specific columns before merging to avoid ambiguity
+    # (pandas only auto-appends suffixes when a column name appears in BOTH frames)
+    ib_rename = {c: f"{c}_A" for c in ["WeatherDelay", "ArrDelay", "NASDelay", "LateAircraftDelay"]}
+    ob_rename = {c: f"{c}_B" for c in ["WeatherDelay", "DepDelay", "LateAircraftDelay"]}
+    ib = ib.rename(columns={k: v for k, v in ib_rename.items() if k in ib.columns})
+    ob = ob.rename(columns={k: v for k, v in ob_rename.items() if k in ob.columns})
+
+    # Match on same aircraft, same day
+    pairs = ib.merge(ob, on=["FlightDate", "Tail_Number"])
+
+    # Turnaround filter + no round-trip (A ≠ B)
+    pairs["turnaround_min"] = pairs["dep_min"] - pairs["arr_min"]
+    mask = (
+        (pairs["turnaround_min"] >= TURNAROUND_MIN_HRS * 60) &
+        (pairs["turnaround_min"] <= TURNAROUND_MAX_HRS * 60) &
+        (pairs["Origin"] != pairs["Dest"])
     )
+    pairs = pairs[mask].copy()
+    pairs = pairs.rename(columns={"Origin": "airport_A", "Dest": "airport_B"})
 
-    # Aggregate outbound flights to (date, airport_B): worst-case weather outcomes
-    ob_agg = (
-        outbound.groupby(["FlightDate", "Dest"])
-        .agg(
-            dep_min_earliest = ("dep_min",          "min"),
-            dep_min_latest   = ("dep_min",          "max"),
-            weather_delay_B  = ("WeatherDelay",     lambda x: x.fillna(0).max()),
-            dep_delay_B      = ("DepDelay",         lambda x: x.fillna(0).max()),
-            late_aircraft_B  = ("LateAircraftDelay",lambda x: x.fillna(0).max()),
-        )
-        .reset_index()
-        .rename(columns={"Dest": "airport_B"})
-    )
-
-    # Merge on date → cross-join of unique airports per day (~10k rows/day vs 160k)
-    pairs = ib_agg.merge(ob_agg, on="FlightDate", how="inner")
-    pairs = pairs[pairs["airport_A"] != pairs["airport_B"]].copy()
-
-    # Feasibility filter: at least one valid turnaround window exists
-    # (earliest outbound departs after earliest inbound arrives + min turnaround,
-    #  and latest outbound departs before latest inbound arrives + max turnaround)
-    turnaround_mid = pairs["dep_min_earliest"] - pairs["arr_min_latest"]
-    feasible = (
-        (pairs["dep_min_latest"]   >= pairs["arr_min_earliest"] + TURNAROUND_MIN_HRS * 60) &
-        (pairs["dep_min_earliest"] <= pairs["arr_min_latest"]   + TURNAROUND_MAX_HRS * 60)
-    )
-    pairs = pairs[feasible].copy()
-    pairs["turnaround_min"] = turnaround_mid[feasible].clip(lower=0)
-
-    print(f"Constructed {len(pairs):,} airport-pair×date rows from {pairs['FlightDate'].nunique():,} dates")
+    n_pairs = pairs.groupby(["airport_A", "airport_B"]).ngroups
+    print(f"Tail-matched: {len(pairs):,} actual sequences  |  "
+          f"{pairs['FlightDate'].nunique():,} unique dates  |  "
+          f"{n_pairs:,} unique (A,B) pairs")
     return pairs
 
 
@@ -232,6 +237,13 @@ def build_feature_matrix(pairs: pd.DataFrame, airport_features: pd.DataFrame) ->
         (pairs["A_weather_delay_rate"] > pairs["A_weather_delay_rate"].quantile(0.75)) &
         (pairs["B_weather_delay_rate"] > pairs["B_weather_delay_rate"].quantile(0.75))
     ).astype(int)
+    # Season dummies — derive from Month if Season column absent (tail-matched path)
+    if "Season" not in pairs.columns and "Month" in pairs.columns:
+        month_to_season = {12:"winter",1:"winter",2:"winter",
+                           3:"spring",4:"spring",5:"spring",
+                           6:"summer",7:"summer",8:"summer",
+                           9:"fall",10:"fall",11:"fall"}
+        pairs["Season"] = pairs["Month"].map(month_to_season)
 
     # Season dummies
     pairs = pd.get_dummies(pairs, columns=["Season"], prefix="season", drop_first=False)
@@ -246,19 +258,23 @@ def build_feature_matrix(pairs: pd.DataFrame, airport_features: pd.DataFrame) ->
 
 def label_sequences(pairs: pd.DataFrame) -> pd.DataFrame:
     """
-    A sequence is labeled 1 (bad) if:
-      - Either leg had a significant weather delay (>= threshold), OR
-      - Leg 1 arrival delay cascaded into leg 2 departure (late aircraft propagation)
+    Label each tail-matched sequence as disrupted (1) if:
+      - Inbound leg (A→DFW) had WeatherDelay >= threshold, OR
+      - Outbound leg (DFW→B) had WeatherDelay >= threshold, OR
+      - Cascade: inbound ArrDelay >= threshold AND outbound LateAircraftDelay >= threshold
+        (the inbound's delay caused a late aircraft situation on the outbound)
     """
-    weather_A = pairs["weather_delay_A"].fillna(0) >= WEATHER_DELAY_THRESHOLD_MIN
-    weather_B = pairs["weather_delay_B"].fillna(0) >= WEATHER_DELAY_THRESHOLD_MIN
+    T = WEATHER_DELAY_THRESHOLD_MIN
+    # Column names after tail-matched merge have _A / _B suffixes
+    w_A = pairs["WeatherDelay_A"].fillna(0) >= T
+    w_B = pairs["WeatherDelay_B"].fillna(0) >= T
     cascade = (
-        (pairs["arr_delay_A"].fillna(0) >= WEATHER_DELAY_THRESHOLD_MIN) &
-        (pairs["late_aircraft_B"].fillna(0) >= WEATHER_DELAY_THRESHOLD_MIN)
+        (pairs["ArrDelay_A"].fillna(0) >= T) &
+        (pairs["LateAircraftDelay_B"].fillna(0) >= T)
     )
-
-    pairs["target"] = (weather_A | weather_B | cascade).astype(int)
-    print(f"Label distribution: {pairs['target'].mean():.1%} high-risk sequences")
+    pairs["target"] = (w_A | w_B | cascade).astype(int)
+    print(f"Label distribution: {pairs['target'].mean():.1%} high-risk sequences "
+          f"(N={len(pairs):,} matched rotations)")
     return pairs
 
 
@@ -293,36 +309,17 @@ def save_features(pairs: pd.DataFrame, year: int = None):
     """
     season_cols = [c for c in pairs.columns if c.startswith("season_")]
 
-    # Stable feature cols: take first value per group (they're the same within group)
+    # Stable feature cols: take first value per group (airport-level stats are
+    # same for all sequences in a given airport_A × airport_B × Month cell)
     static_feat_cols = [c for c in FEATURE_COLS + season_cols if c in pairs.columns
                         and c not in ("Month", "turnaround_min")]
 
-    agg_dict = {c: "first" for c in static_feat_cols}
-    agg_dict["target"]          = "mean"    # observed bad rate
-    agg_dict["turnaround_min"]  = "median"  # median turnaround for the pair×month
-    agg_dict["airport_A"]       = "first"
-    agg_dict["airport_B"]       = "first"
-
     grouped = (
         pairs
         .groupby(["airport_A", "airport_B", "Month", "Year"])
         .agg(
-            n_sequences=("target", "count"),
-            observed_bad_rate=("target", "mean"),
-            median_turnaround_min=("turnaround_min", "median"),
-            **{c: ("target" if c == "target" else c, "first")
-               for c in static_feat_cols}
-        )
-    )
-
-    # Flatten multi-index columns from named agg
-    grouped = (
-        pairs
-        .assign(n_seq=1)
-        .groupby(["airport_A", "airport_B", "Month", "Year"])
-        .agg(
-            n_sequences          = ("n_seq",           "count"),
-            observed_bad_rate    = ("target",           "mean"),
+            n_sequences          = ("target",          "count"),   # actual matched rotations
+            observed_bad_rate    = ("target",          "mean"),    # fraction disrupted
             median_turnaround_min= ("turnaround_min",  "median"),
             **{c: (c, "first") for c in static_feat_cols}
         )

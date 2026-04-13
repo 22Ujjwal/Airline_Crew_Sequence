@@ -293,7 +293,7 @@ with st.sidebar:
     st.title("AA DFW Crew Risk")
     st.caption("Weather-driven crew sequence risk scoring for A→DFW→B routes")
     st.divider()
-    st.markdown("**Model:** XGBoost v3 + Isotonic Calibration  \n**High risk:** ≥30% disruption rate  \n**Val AUC:** 0.833  \n**Val AP:** 0.830")
+    st.markdown("**Model:** XGBoost v3 + Isotonic Calibration  \n**High risk:** ≥30% disruption rate  \n**Val AUC:** 0.825  \n**Val AP:** 0.445")
     st.divider()
     st.subheader("Live Schedule API")
     aviationstack_key = st.text_input(
@@ -338,10 +338,10 @@ with tab_overview:
     _mc = st.columns(6)
     for _col, (_lbl, _val) in zip(_mc, [
         ("Algorithm",   "XGBoost v3"),
-        ("Val AUC",     "0.833"),
-        ("Val AP",      "0.830"),
+        ("Val AUC",     "0.825"),
+        ("Val AP",      "0.445"),
         ("Features",    "70"),
-        ("Train rows",  "~400k"),
+        ("Train rows",  "~398k"),
         ("Val split",   "Time-based"),
     ]):
         _col.markdown(
@@ -475,10 +475,10 @@ y_{A,B,m} = \begin{cases}
 **Threshold rationale: 0.25**
 
 The 0.25 bad-rate threshold was chosen after examining the full distribution of
-pair-month disruption rates. At the 25th percentile the tail of high-disruption
-cells separates from the bulk. A 50% threshold would create a spurious 50/50 split
-with no operational meaning; 0.25 captures pairs that are *materially* elevated,
-yielding a 42.1% positive rate.
+pair-month disruption rates on tail-matched sequences. A 50% threshold would create a
+spurious 50/50 split with no operational meaning; 0.25 captures corridor-months where
+more than 1-in-4 actual crew rotations experienced weather disruption — a materially
+elevated frequency. This yields an **11.4% positive rate** (scale_pos_weight ≈ 7.7).
 
 **Turnaround constraints**
 
@@ -498,16 +498,14 @@ crew turn plus an operational ceiling beyond which a new crew is typically assig
 - Key fields used: `Tail_Number`, `FlightDate`, `Origin`, `Dest`, `CRSDepTime`,
   `CRSArrTime`, `WeatherDelay`, `NASDelay`, `Cancelled`, `CancellationCode`
 
-**Sequence construction — corridor-day model.** Rather than linking individual flights
-by tail number (which would produce 1–3 matched rotations per airport pair per day),
-the feature engineering aggregates ALL inbound flights from A to DFW into a single
-worst-case row per (date, airport_A), and all outbound flights from DFW to B into
-a single worst-case row per (date, airport_B), then cross-joins by date. This produces
-**one row per (airport_A, airport_B, date)** — a *corridor-day* observation.
-`n_sequences` in any pair-month therefore equals the number of **calendar days** in that
-month where both A→DFW and DFW→B operations existed (~28–31), not individual tail-matched
-crew rotations. The model learns corridor-level risk: "how often does this A–DFW–B
-corridor experience weather disruption on any given day?"
+**Sequence construction — tail-matched rotations.** Each observation is a real aircraft
+rotation: an inbound leg from airport A arriving at DFW, linked to an outbound leg from
+DFW to airport B on the **same tail number and same calendar date**, with a turnaround
+window of 30–240 minutes. This captures the actual crew assignment: if the same aircraft
+(and likely the same crew) flew A→DFW and then DFW→B, that is one sequence.
+Aggregating by (airport_A, airport_B, Month, Year) yields `n_sequences` equal to the
+**number of matched rotations** in that year-month — on average 3.6 per cell, median 2,
+reflecting the true operational frequency of the A–DFW–B pairing.
 
 **Secondary source — NOAA GSOM (Global Summary of Month)**
 - Monthly climate normals: precipitation, wind speed/gust, extreme-event counts
@@ -515,26 +513,24 @@ corridor experience weather disruption on any given day?"
 - XGBoost handles missing GSOM data natively via built-in NaN routing in split
   decisions — airports without GSOM still participate in all non-GSOM splits
 
-**Labeling.** A corridor-day is *disrupted* if the worst-case weather delay across
-ALL flights on the A→DFW leg **or** DFW→B leg on that date is ≥ 15 min, or if a
-cascade is detected (inbound arrival delay ≥ 15 min propagates into a late-aircraft
-departure delay ≥ 15 min on the outbound leg). `observed_bad_rate` is the fraction
-of calendar days in a `(pair, month)` cell that are disrupted. Note that major hubs
-(MCO, LAX, ORD) can reach 80–100% bad rates in summer — not because crews are always
-disrupted, but because at least ONE flight on those high-frequency corridors triggers
-the threshold on most days. The binary label `y = 1` if this rate exceeds **0.25**
-(median of the distribution) — chosen to reflect materially elevated corridor risk.
-The resulting class balance is **42.1% positive**.
+**Labeling.** A sequence is *disrupted* if the inbound leg had weather delay ≥ 15 min,
+**or** the outbound leg had weather delay ≥ 15 min, **or** a cascade is detected
+(inbound arrival delay ≥ 15 min propagates into a late-aircraft departure delay ≥ 15 min
+on the outbound leg). `observed_bad_rate` is the fraction of matched rotations in a
+`(pair, month, year)` cell that are disrupted. The binary label `y = 1` if this rate
+exceeds **0.25**, yielding an **11.4% positive rate** — reflecting the true rarity
+of severely weather-disrupted crew rotations on any given corridor.
             """)
         with _d2:
             _ds_rows = [
                 ("BTS years",          "2015–2024"),
                 ("Raw flight records",  "~8.5M"),
-                ("Sequence pairs built","~429k obs"),
-                ("Unique pair-months",  "~40k"),
+                ("Tail-matched seqs",   "~398k obs"),
+                ("Unique pair-months",  "~156k"),
+                ("Avg seqs/pair-month", "~3.6"),
                 ("Unique airports A",   "~250"),
                 ("Unique airports B",   "~250"),
-                ("Positive rate",       "42.1%"),
+                ("Positive rate",       "11.4%"),
                 ("Threshold",           "25% bad rate"),
                 ("Turnaround window",   "30–240 min"),
                 ("GSOM airport cov.",   "~55%"),
@@ -709,11 +705,11 @@ Pair-level metrics below are computed on all aggregated pair-month scores vs. ob
         # Metric cards row
         _ev_cols = st.columns(5)
         for _col, (_lbl, _val, _note) in zip(_ev_cols, [
-            ("Val AUC",         "0.833", "sequence-level (2024)"),
-            ("Val AP",          "0.830", "sequence-level (2024)"),
-            ("Pair AUC",        "0.938", "pair-level aggregation"),
-            ("Pair AP",         "0.892", "pair-level aggregation"),
-            ("F1 @ 0.30",       "0.688", "calibrated HIGH threshold"),
+            ("Val AUC",         "0.825", "sequence-level (2024)"),
+            ("Val AP",          "0.445", "sequence-level (2024)"),
+            ("Pair AUC",        "0.803", "pair-level aggregation"),
+            ("Pair AP",         "0.349", "pair-level aggregation"),
+            ("F1 @ 0.11",       "0.388", "optimized pair threshold"),
         ]):
             _col.markdown(
                 f'<div style="border:1px solid rgba(128,128,128,0.25);border-radius:8px;'
@@ -889,8 +885,8 @@ Pair-level metrics below are computed on all aggregated pair-month scores vs. ob
 
 Points lie **near the diagonal** — after isotonic regression calibration, model scores
 directly approximate observed corridor bad rates. A score of **0.30** means
-*"approximately 30% of calendar days in this month historically had at least one
-weather disruption on the A→DFW or DFW→B corridor."*
+*"approximately 30% of tail-matched crew rotations on this corridor in this month
+historically experienced a weather disruption."*
 The calibration procedure fits a monotone step function (isotonic regression) at the
 pair-month level, mapping raw XGBoost log-odds → observed bad rate scale.
 Ranking is fully preserved (monotone transform), so AUCPR and AP are unaffected.
@@ -900,7 +896,7 @@ its mean observed bad rate closely, with deviation < 0.03 on average.
 
 **Known limitations**
 
-1. **Corridor-day granularity.** The model scores airport *corridors* (how often does the A→DFW or DFW→B route have any weather event?), not individual tail-matched crew rotations. Scores for high-frequency hubs (MCO, ORD, ATL) can reach 80–100% in summer because the sheer number of daily flights makes at least one weather event almost certain — not because every crew rotation is disrupted.
+1. **Tail-number matching as crew proxy.** The model links flights by shared tail number (same aircraft = likely same crew), but crew scheduling can deviate from aircraft routing. Scores approximate crew exposure, not guaranteed crew assignment.
 2. **AA-only training.** Tail-chain and cascade features reflect AA operational patterns; scores for non-AA carriers on the same routes may differ.
 3. **Climate stationarity.** Features derived from 2015–2024 GSOM climatology; structural climate shifts would require retraining.
 4. **No real-time weather.** Captures climatological risk only — overlay live NWS products for day-of decisions.
@@ -1170,7 +1166,7 @@ with tab_dash:
         st.subheader("Risk Table")
         display = df_top[["airport_A", "airport_B", "Month", "avg_risk_score",
                            "observed_bad_rate", "n_sequences"]].copy()
-        display.columns = ["Origin", "Dest", "Month", "Model Risk", "Observed Bad %", "Days Observed"]
+        display.columns = ["Origin", "Dest", "Month", "Model Risk", "Observed Bad %", "Rotations"]
         display["Model Risk"] = display["Model Risk"].map("{:.1%}".format)
         display["Observed Bad %"] = display["Observed Bad %"].map("{:.1%}".format)
         st.dataframe(display, width='stretch', height=420)
@@ -1179,10 +1175,10 @@ with tab_dash:
                 "this directly approximates the fraction of sequences on this route that are weather-disrupted. "
                 "E.g. 0.30 = ~30% of sequences historically disrupted.") +
             " vs " +
-            tip("Observed Bad %", "Fraction of calendar days in this pair-month (2015–2024) on which "
-                "at least one flight on either the A→DFW or DFW→B corridor experienced "
-                "a weather delay ≥15 min or weather cancellation. "
-                "Measured at airport-corridor level, not individual tail-matched crew rotations.") +
+            tip("Observed Bad %", "Fraction of tail-matched aircraft rotations (same tail number, same date) "
+                "in this pair-month (2015–2024) where the inbound A→DFW leg or outbound DFW→B leg "
+                "had a weather delay ≥15 min, or a cascade was detected (late-aircraft propagation). "
+                "Direct sample estimate of disruption frequency for this crew assignment.") +
             " — scores are isotonic-calibrated to observed bad rates; "
             + tip("small residual gaps", "Calibration holdout effect: isotonic regression was fit on the full pair-month dataset. "
                   "For rare route-month combinations, calibration may be slightly off.") +
@@ -1845,8 +1841,8 @@ with tab_query:
                     f"| **Sequence** | {airport_a} → DFW → {airport_b} |\n"
                     f"| **Month** | {ap_meta.MONTH_NAMES[q_month]} |\n"
                     f"| {tip('Model Risk Score', 'Calibrated XGBoost score ≈ fraction of days in this month on which the A→DFW or DFW→B corridor experiences weather disruption. Isotonic regression maps raw model output to the observed corridor bad-rate scale.')} | {result['risk_score']:.1%} |\n"
-                    f"| {tip('Observed Corridor Bad Rate', 'Fraction of calendar days in this pair-month (2015–2024) on which at least one flight on the A→DFW or DFW→B corridor had a weather delay ≥15 min. Measured at airport-corridor level — not tail-matched crew rotations. Major hubs can show 80-100% because any one of dozens of flights triggering the threshold marks the whole day.')} | {result['observed_bad_rate']:.1%} |\n"
-                    f"| {tip('Days Observed', 'Number of calendar days in this month (across 2015–2024) on which both airport A had inbound flights to DFW and airport B had outbound flights from DFW. Capped at the number of days in the month (~28–31). This is the sample size for the observed bad rate — not individual tail-matched crew rotations.')} | {result['n_sequences']:,} |\n",
+                    f"| {tip('Observed Rotation Bad Rate', 'Fraction of tail-matched aircraft rotations (same tail number, same date, 30–240 min turn) in this pair-month (2015–2024) where the A→DFW inbound leg or DFW→B outbound leg had a weather delay ≥15 min, or a cascade was detected. This is the direct sample estimate of crew disruption frequency.')} | {result['observed_bad_rate']:.1%} |\n"
+                    f"| {tip('Rotations Observed', 'Number of tail-matched aircraft rotations (same tail number, same date) on this corridor in this month across 2015–2024. The sample size for the observed bad rate. Typical value is 2–10 per year-month; rare corridors may have only 1.')} | {result['n_sequences']:,} |\n",
                     unsafe_allow_html=True,
                 )
 
