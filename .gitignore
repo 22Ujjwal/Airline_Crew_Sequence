@@ -65,7 +65,6 @@ data/processed/feature_importance.png
 
 # ── Claude internal memory ────────────────────────────────────────────────────
 memory/
-CLAUDE.md
 
 # ── Streamlit secrets (never commit) ─────────────────────────────────────────
 .streamlit/secrets.toml
