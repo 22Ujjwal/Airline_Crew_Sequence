@@ -50,7 +50,7 @@ MONTHLY_VARS = [
     "snowfall_sum",             # total monthly snowfall
     "wind_speed_10m_max",       # mean of daily max wind speed
     "wind_gusts_10m_max",       # mean of daily max gusts
-    "precipitation_hours",      # hours with precipitation (proxy for precip_days)
+    # precipitation_hours is daily-only — not available in monthly aggregation
 ]
 
 RATE_LIMIT_WAIT_S = 120   # seconds to wait on 429 before retrying
@@ -109,7 +109,6 @@ def fetch_airport(iata: str, lat: float, lon: float, retries: int = 4) -> pd.Dat
         "max_gust_mph":    monthly.get("wind_gusts_10m_max"),     # mean of daily gusts
         "total_precip_in": monthly.get("precipitation_sum"),
         "snow_in":         monthly.get("snowfall_sum"),
-        "precip_hrs":      monthly.get("precipitation_hours"),    # hours with precip
         "avg_temp_max_f":  monthly.get("temperature_2m_max"),
         "avg_temp_min_f":  monthly.get("temperature_2m_min"),
     })
@@ -118,7 +117,8 @@ def fetch_airport(iata: str, lat: float, lon: float, retries: int = 4) -> pd.Dat
     df["month"] = df["date"].dt.month
 
     # Derived columns that mirror old GSOM feature names
-    df["precip_days"]     = (df["precip_hrs"].fillna(0) / 6).clip(0, 31).round()   # ~6h/day
+    # precip_days: estimate from total precip (avg ~0.1 in/day threshold → ~10 days per inch)
+    df["precip_days"]     = (df["total_precip_in"].fillna(0) * 10).clip(0, 31).round()
     df["snow_days"]       = (df["snow_in"].fillna(0) > 0.1).astype(int)            # binary month flag
     df["severe_wx_days"]  = (df["total_precip_in"].fillna(0) > 4.0).astype(int)    # >4in/mo = heavy month
     df["extreme_cold_days"] = (df["avg_temp_min_f"].fillna(40) < 32).astype(int)
