@@ -70,6 +70,11 @@ FEATURE_COLS = [
     "mhc_total_late_min_mean", "mhc_total_late_min_p75",
     "mhc_cascade_hop_rate", "mhc_cascade_depth_mean",
     "mhc_unique_airports_mean", "mhc_recovery_rate",
+    # Interaction features (computed in load_features)
+    "A_B_weather_coincidence",   # joint airport risk (product)
+    "B_given_A_risk_ratio",      # how much B compounds A's risk
+    # Temporal lag: storm clustering month-over-month
+    "prev_month_bad_rate",
 ]
 
 
@@ -172,6 +177,24 @@ def load_features():
     else:
         print("multihop_cascade_features.parquet not found — skipping multi-hop cascade features")
 
+    # ── Interaction features ───────────────────────────────────────────────
+    # Joint weather risk: two airports simultaneously bad → higher compound risk
+    if "A_weather_delay_rate" in df.columns and "B_weather_delay_rate" in df.columns:
+        df["A_B_weather_coincidence"] = (
+            df["A_weather_delay_rate"] * df["B_weather_delay_rate"]
+        )
+        df["B_given_A_risk_ratio"] = df["B_weather_delay_rate"] / (
+            df["A_weather_delay_rate"] + 1e-6
+        )
+
+    # ── Temporal lag feature ───────────────────────────────────────────────
+    # Storm clustering: last month's disruption rate predicts this month
+    if "observed_bad_rate" in df.columns:
+        df = df.sort_values(["airport_A", "airport_B", "Year", "Month"])
+        df["prev_month_bad_rate"] = (
+            df.groupby(["airport_A", "airport_B"])["observed_bad_rate"].shift(1)
+        )
+
     season_cols = [c for c in df.columns if c.startswith("season_")]
     return df, season_cols
 
@@ -180,10 +203,29 @@ def train(df: pd.DataFrame, feature_cols: list[str]) -> xgb.XGBClassifier:
     X = df[feature_cols].astype(float)
     y = df["target"].astype(int)
 
-    # Class imbalance: weight the minority class
-    neg, pos = (y == 0).sum(), (y == 1).sum()
+    # Time-based splits:
+    #   train   → years before second-to-last year
+    #   val     → second-to-last year (early stopping signal)
+    #   cal     → last 2 years (held out for isotonic calibration fitting)
+    years      = sorted(df["Year"].unique())
+    cal_cutoff = years[-2]          # last 2 years reserved for calibration
+    val_year   = years[-3]          # year just before calibration window
+
+    train_mask = df["Year"] < val_year
+    val_mask   = df["Year"] == val_year
+    cal_mask   = df["Year"] >= cal_cutoff
+
+    X_train, y_train = X[train_mask], y[train_mask]
+    X_val,   y_val   = X[val_mask],   y[val_mask]
+
+    print(f"Train:        {len(X_train):,} rows (Year < {val_year})")
+    print(f"Val:          {len(X_val):,}   rows (Year == {val_year})")
+    print(f"Cal holdout:  {cal_mask.sum():,}   rows (Year >= {cal_cutoff}, reserved for calibration)")
+
+    # Class imbalance: weight minority class on training set only
+    neg, pos = (y_train == 0).sum(), (y_train == 1).sum()
     scale_pos_weight = neg / pos
-    print(f"Class balance — negative: {neg:,}, positive: {pos:,}, scale_pos_weight: {scale_pos_weight:.2f}")
+    print(f"Class balance (train) — neg: {neg:,}, pos: {pos:,}, spw: {scale_pos_weight:.2f}")
 
     model = xgb.XGBClassifier(
         n_estimators=500,
@@ -192,7 +234,7 @@ def train(df: pd.DataFrame, feature_cols: list[str]) -> xgb.XGBClassifier:
         subsample=0.8,
         colsample_bytree=0.8,
         scale_pos_weight=scale_pos_weight,
-        eval_metric="aucpr",          # average precision — better for imbalanced
+        eval_metric="aucpr",
         early_stopping_rounds=30,
         random_state=42,
         n_jobs=-1,
@@ -200,30 +242,36 @@ def train(df: pd.DataFrame, feature_cols: list[str]) -> xgb.XGBClassifier:
         tree_method="hist",
     )
 
-    # Time-based split: train on earlier years, validate on most recent year
-    train_mask = df["Year"] < df["Year"].max()
-    val_mask = df["Year"] == df["Year"].max()
+    model.fit(X_train, y_train, eval_set=[(X_val, y_val)], verbose=50)
 
-    X_train, y_train = X[train_mask], y[train_mask]
-    X_val, y_val = X[val_mask], y[val_mask]
-
-    print(f"Train: {len(X_train):,} rows | Val: {len(X_val):,} rows")
-
-    model.fit(
-        X_train, y_train,
-        eval_set=[(X_val, y_val)],
-        verbose=50,
-    )
-
-    # Evaluation
-    y_pred_proba = model.predict_proba(X_val)[:, 1]
+    # ── Validation metrics ────────────────────────────────────────────────────
+    y_prob = model.predict_proba(X_val)[:, 1]
     y_pred = model.predict(X_val)
 
+    auc = roc_auc_score(y_val, y_prob)
+    ap  = average_precision_score(y_val, y_prob)
+
+    # Top-k precision: how reliably does the model find the worst sequences?
+    k            = max(1, int(0.10 * len(y_val)))
+    top_k_idx    = np.argsort(y_prob)[-k:]
+    top_k_prec   = float(y_val.iloc[top_k_idx].mean())
+
+    # Expected Calibration Error (ECE): are predicted probabilities trustworthy?
+    from sklearn.calibration import calibration_curve
+    n_bins = 10
+    frac_pos, mean_pred = calibration_curve(y_val, y_prob, n_bins=n_bins, strategy="quantile")
+    ece = float(np.mean(np.abs(frac_pos - mean_pred)))
+
     print("\n--- Validation Results ---")
-    print(f"ROC-AUC:           {roc_auc_score(y_val, y_pred_proba):.4f}")
-    print(f"Average Precision: {average_precision_score(y_val, y_pred_proba):.4f}")
+    print(f"ROC-AUC:            {auc:.4f}")
+    print(f"Average Precision:  {ap:.4f}")
+    print(f"Top-10% Precision:  {top_k_prec:.4f}  (model's best {k} calls, {top_k_prec:.1%} correct)")
+    print(f"ECE:                {ece:.4f}  (0 = perfect calibration)")
     print("\nClassification Report:")
     print(classification_report(y_val, y_pred, target_names=["low_risk", "high_risk"]))
+
+    # Attach calibration holdout mask to model for use in fit_and_save_calibration
+    model._cal_mask = cal_mask
 
     return model
 
@@ -272,6 +320,74 @@ def score_all_pairs(model: xgb.XGBClassifier, df: pd.DataFrame, feature_cols: li
     return pair_scores
 
 
+def fit_and_save_calibration(model: xgb.XGBClassifier, df: pd.DataFrame,
+                              feature_cols: list[str]):
+    """
+    Fit isotonic calibration on the held-out calibration set (last 2 years).
+    Using a holdout set prevents the calibration from memorising the training
+    distribution, giving more honest probabilities on new route-months.
+
+    Saves:
+      calibration_isotonic.json  — (x=raw_score, y=calibrated) breakpoints
+      gsom_month_medians.json    — legacy fallback (kept for predictor.py compatibility)
+      pair_risk_scores.parquet   — updated with calibrated avg_risk_score
+    """
+    from sklearn.isotonic import IsotonicRegression
+
+    cal_mask = getattr(model, "_cal_mask", df["Year"] >= df["Year"].max() - 1)
+
+    X_cal = df.loc[cal_mask, feature_cols].astype(float)
+    y_cal = df.loc[cal_mask, "target"].astype(int)
+    obs_cal = df.loc[cal_mask, "observed_bad_rate"].astype(float)
+    n_seq = df.loc[cal_mask, "n_sequences"].astype(float) if "n_sequences" in df.columns else None
+
+    # Raw scores in calibration batches of 50k to avoid OOM
+    raw_scores = np.zeros(len(X_cal), dtype=float)
+    for start in range(0, len(X_cal), 50_000):
+        batch = X_cal.iloc[start:start + 50_000]
+        raw_scores[start:start + 50_000] = model.predict_proba(batch)[:, 1]
+
+    # Fit isotonic on holdout: map raw XGBoost probability → observed bad rate
+    iso = IsotonicRegression(out_of_bounds="clip")
+    sample_weight = np.sqrt(n_seq.values) if n_seq is not None else None
+    iso.fit(raw_scores, obs_cal.values, sample_weight=sample_weight)
+
+    cal_out = {"x": iso.X_thresholds_.tolist(), "y": iso.y_thresholds_.tolist()}
+    with open(os.path.join(PROCESSED_DIR, "calibration_isotonic.json"), "w") as f:
+        json.dump(cal_out, f)
+    print(f"Calibration saved ({len(iso.X_thresholds_)} breakpoints, "
+          f"fitted on {cal_mask.sum():,} holdout rows)")
+
+    # Calibrate pair_risk_scores
+    def calibrate(p):
+        return float(np.interp(p, iso.X_thresholds_, iso.y_thresholds_))
+
+    prs_path = os.path.join(PROCESSED_DIR, "pair_risk_scores.parquet")
+    if os.path.exists(prs_path):
+        prs = pd.read_parquet(prs_path)
+        prs["avg_risk_score_raw"] = prs["avg_risk_score"]
+        prs["avg_risk_score"] = prs["avg_risk_score_raw"].apply(calibrate)
+        prs.to_parquet(prs_path, index=False)
+        print(f"pair_risk_scores.parquet updated with calibrated scores")
+
+    # Save GSOM month medians as legacy fallback (predictor.py uses these if
+    # openmeteo_airport_monthly.parquet is absent)
+    gsom_cols = [c for c in feature_cols
+                 if any(c.startswith(p) for p in ("A_avg_wind", "A_precip", "A_extreme",
+                                                   "A_total_precip", "A_max_wind_gust"))]
+    gsom_medians: dict = {}
+    for col in gsom_cols:
+        if col in df.columns:
+            monthly = (
+                df.groupby("Month")[col].median().dropna()
+                .apply(lambda v: round(float(v), 4))
+            )
+            gsom_medians[col] = {str(k): v for k, v in monthly.items()}
+    if gsom_medians:
+        with open(os.path.join(PROCESSED_DIR, "gsom_month_medians.json"), "w") as f:
+            json.dump(gsom_medians, f)
+
+
 def main():
     df, season_cols = load_features()
     feature_cols = FEATURE_COLS + season_cols
@@ -286,6 +402,7 @@ def main():
 
     plot_feature_importance(model, feature_cols)
     score_all_pairs(model, df, feature_cols)
+    fit_and_save_calibration(model, df, feature_cols)
 
 
 if __name__ == "__main__":

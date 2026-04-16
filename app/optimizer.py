@@ -21,8 +21,8 @@ MOD_THRESHOLD  = 0.20
 # ── Cost matrix ───────────────────────────────────────────────────────────────
 
 def build_cost_matrix(
-    arrivals: pd.DataFrame,       # cols: airport, time_min, flight, time_str
-    departures: pd.DataFrame,     # cols: airport, time_min, flight, time_str
+    arrivals: pd.DataFrame,       # cols: airport, time_min, flight, time_str[, carrier]
+    departures: pd.DataFrame,     # cols: airport, time_min, flight, time_str[, carrier]
     scores_idx: pd.DataFrame,     # pair_risk_scores indexed by (airport_A, airport_B, Month)
     month: int,
     unknown_risk: float = 0.20,   # neutral score for unknown pairs (calibrated scale)
@@ -30,18 +30,25 @@ def build_cost_matrix(
     """
     Return n_arrivals × n_departures cost matrix.
     Vectorized: cross-join → filter → batch-lookup via merge. O(n*m) pandas, not Python loops.
+    Cross-carrier pairings (e.g. AA arrival → DL departure) are blocked via INFEASIBLE penalty.
     """
-    arr = arrivals.reset_index(drop=True)[["airport", "time_min"]].copy()
-    dep = departures.reset_index(drop=True)[["airport", "time_min"]].copy()
+    has_carrier = "carrier" in arrivals.columns and "carrier" in departures.columns
+
+    arr_cols = ["airport", "time_min"] + (["carrier"] if has_carrier else [])
+    dep_cols = ["airport", "time_min"] + (["carrier"] if has_carrier else [])
+    arr = arrivals.reset_index(drop=True)[arr_cols].copy()
+    dep = departures.reset_index(drop=True)[dep_cols].copy()
     arr["_i"] = arr.index
     dep["_j"] = dep.index
 
     # Cross-join
     pairs = arr.merge(dep, how="cross", suffixes=("_a", "_b"))
 
-    # Filter: turnaround window + no same-airport round-trip
+    # Filter: turnaround window + no same-airport round-trip + same carrier
     ta = pairs["time_min_b"] - pairs["time_min_a"]
     mask = (ta >= MIN_TURN) & (ta <= MAX_TURN) & (pairs["airport_a"] != pairs["airport_b"])
+    if has_carrier:
+        mask &= (pairs["carrier_a"] == pairs["carrier_b"])
     pairs = pairs[mask].copy()
     pairs.rename(columns={"airport_a": "airport_A", "airport_b": "airport_B"}, inplace=True)
     pairs["Month"] = month
@@ -147,10 +154,10 @@ def bts_to_arrivals(day_df: pd.DataFrame, arr_start_h: int, arr_end_h: int) -> p
     df = df[(df["time_min"] >= arr_start_h * 60) & (df["time_min"] < arr_end_h * 60)]
     df["time_str"] = (df["time_min"] // 60).astype(int).astype(str).str.zfill(2) + ":" + \
                      (df["time_min"] % 60).astype(int).astype(str).str.zfill(2)
-    df["flight"] = df.get("Reporting_Airline", "AA").fillna("AA").astype(str) + \
-                   df["Flight_Number_Reporting_Airline"].fillna("").astype(str)
+    df["carrier"] = df.get("Reporting_Airline", "AA").fillna("AA").astype(str)
+    df["flight"]  = df["carrier"] + df["Flight_Number_Reporting_Airline"].fillna("").astype(str)
     return df.rename(columns={"Origin": "airport"})[
-        ["airport", "time_min", "time_str", "flight", "Tail_Number"]
+        ["airport", "time_min", "time_str", "flight", "Tail_Number", "carrier"]
     ].dropna(subset=["airport", "time_min"]).reset_index(drop=True)
 
 
@@ -161,10 +168,10 @@ def bts_to_departures(day_df: pd.DataFrame, dep_start_h: int, dep_end_h: int) ->
     df = df[(df["time_min"] >= dep_start_h * 60) & (df["time_min"] < dep_end_h * 60)]
     df["time_str"] = (df["time_min"] // 60).astype(int).astype(str).str.zfill(2) + ":" + \
                      (df["time_min"] % 60).astype(int).astype(str).str.zfill(2)
-    df["flight"] = df.get("Reporting_Airline", "AA").fillna("AA").astype(str) + \
-                   df["Flight_Number_Reporting_Airline"].fillna("").astype(str)
+    df["carrier"] = df.get("Reporting_Airline", "AA").fillna("AA").astype(str)
+    df["flight"]  = df["carrier"] + df["Flight_Number_Reporting_Airline"].fillna("").astype(str)
     return df.rename(columns={"Dest": "airport"})[
-        ["airport", "time_min", "time_str", "flight", "Tail_Number"]
+        ["airport", "time_min", "time_str", "flight", "Tail_Number", "carrier"]
     ].dropna(subset=["airport", "time_min"]).reset_index(drop=True)
 
 
@@ -211,12 +218,14 @@ def aviationstack_to_arrivals(raw: list[dict], start_h: int, end_h: int) -> pd.D
         if not (start_h * 60 <= t_min < end_h * 60):
             continue
         flt = f.get("flight") or {}
+        airline = (f.get("airline") or {}).get("iata", "")
         rows.append({
             "airport":     origin,
             "time_min":    t_min,
             "time_str":    t_str,
             "flight":      flt.get("iata", "AA?"),
             "Tail_Number": (f.get("aircraft") or {}).get("registration", ""),
+            "carrier":     airline,
         })
     return pd.DataFrame(rows) if rows else pd.DataFrame()
 
@@ -241,12 +250,14 @@ def aviationstack_to_departures(raw: list[dict], start_h: int, end_h: int) -> pd
             continue
         if not (start_h * 60 <= t_min < end_h * 60):
             continue
-        flt = f.get("flight", {})
+        flt     = f.get("flight", {})
+        airline = (f.get("airline") or {}).get("iata", "")
         rows.append({
             "airport":     dest,
             "time_min":    t_min,
             "time_str":    t_str,
             "flight":      flt.get("iata", "AA?"),
             "Tail_Number": (f.get("aircraft") or {}).get("registration", ""),
+            "carrier":     airline,
         })
     return pd.DataFrame(rows) if rows else pd.DataFrame()

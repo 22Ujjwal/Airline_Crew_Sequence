@@ -62,8 +62,9 @@ FEATURE_COLS = [
     "Month", "is_spring_summer", "median_turnaround_min",
 ]
 
-# Global bad-rate threshold from training (from feature_engineering output)
-GLOBAL_BAD_RATE_THRESHOLD = 0.167
+# Global bad-rate threshold — must match RISK_THRESHOLD in model.py (0.25)
+# Previously was 0.167 (median-based), which made OOD metrics incomparable to training.
+GLOBAL_BAD_RATE_THRESHOLD = 0.25
 
 
 # ---------------------------------------------------------------------------
@@ -166,7 +167,7 @@ def aggregate_to_pair_month(pairs: pd.DataFrame) -> pd.DataFrame:
         )
         .reset_index()
     )
-    agg["target"] = (agg["observed_bad_rate"] >= GLOBAL_BAD_RATE_THRESHOLD).astype(int)
+    agg["target"] = (agg["observed_bad_rate"] > GLOBAL_BAD_RATE_THRESHOLD).astype(int)
     return agg
 
 

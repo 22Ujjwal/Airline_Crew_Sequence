@@ -34,64 +34,105 @@ else:
 HIGH_THRESHOLD = 0.30   # ≥30% of sequences historically disrupted
 MOD_THRESHOLD  = 0.20   # ≥20% of sequences historically disrupted
 
-# ── GSOM month-level median imputation ──────────────────────────────────────
-# Airports without a nearby NOAA GSOM station (~55% of DFW AA routes) have NaN
-# for all five climate features. XGBoost's NaN default branches learned that
-# "no GSOM station" correlates with lower disruption rates (because GSOM-less airports
-# tend to be smaller), creating a hidden bias. We fix this by substituting the
-# month-level population median — giving uncovered airports a neutral, seasonal
-# climate signal rather than letting the model infer risk from missingness alone.
-_gsom_med_path = os.path.join(PROCESSED, "gsom_month_medians.json")
-if os.path.exists(_gsom_med_path):
-    with open(_gsom_med_path) as _gf:
-        _GSOM_MEDIANS: dict[str, dict[int, float]] = {
-            k: {int(mk): mv for mk, mv in v.items()}
-            for k, v in _json.load(_gf).items()
-        }
-else:
-    _GSOM_MEDIANS = {}
+# ── Open-Meteo per-airport weather lookup (replaces GSOM median imputation) ──
+# Old approach: fill NaN GSOM features with month-level POPULATION medians.
+#   Problem: the model was trained with NaN for ~55% of airports; at inference
+#   replacing NaN with medians creates a distribution shift.
+# New approach: load actual Open-Meteo ERA5 climate per airport×month.
+#   Coverage: 100% of airports (ERA5 is global reanalysis, no station gaps).
+#   Column mapping keeps XGBoost feature names unchanged (no retraining needed).
+#
+# Fallback: if openmeteo file not yet generated, falls back to old GSOM medians.
 
-_GSOM_COLS_A    = ["A_avg_wind_speed", "A_precip_days", "A_extreme_precip",
-                   "A_total_precip", "A_max_wind_gust"]
-_GSOM_COLS_B    = ["B_avg_wind_speed", "B_precip_days", "B_extreme_precip",
-                   "B_total_precip", "B_max_wind_gust"]
-_GSOM_COLS_PAIR = ["pair_max_avg_wind_speed", "pair_max_precip_days",
-                   "pair_max_extreme_precip", "pair_max_total_precip", "pair_max_max_wind_gust"]
+_OM_TO_GSOM = {
+    "avg_wind_mph":    "avg_wind_speed",
+    "max_gust_mph":    "max_wind_gust",
+    "total_precip_in": "total_precip",
+    "precip_days":     "precip_days",
+    "severe_wx_days":  "extreme_precip",
+}
+_GSOM_WEATHER_COLS = list(_OM_TO_GSOM.values())   # model-facing names
+
+_om_path = os.path.join(PROCESSED, "openmeteo_airport_monthly.parquet")
+_gsom_med_path = os.path.join(PROCESSED, "gsom_month_medians.json")
+
+if os.path.exists(_om_path):
+    # Load Open-Meteo climatological normals (mean across 2015-2024 per airport×month)
+    _om_raw = pd.read_parquet(_om_path)
+    _OM_LOOKUP: pd.DataFrame = (
+        _om_raw
+        .groupby(["iata", "month"])[list(_OM_TO_GSOM.keys())]
+        .mean()
+        .rename(columns=_OM_TO_GSOM)
+        .reset_index()
+        .rename(columns={"month": "Month"})
+    )
+    _USE_OPENMETEO = True
+else:
+    _USE_OPENMETEO = False
+    # Legacy fallback: global monthly medians
+    if os.path.exists(_gsom_med_path):
+        with open(_gsom_med_path) as _gf:
+            _GSOM_MEDIANS: dict[str, dict[int, float]] = {
+                k: {int(mk): mv for mk, mv in v.items()}
+                for k, v in _json.load(_gf).items()
+            }
+    else:
+        _GSOM_MEDIANS = {}
+
+_GSOM_COLS_A    = [f"A_{c}" for c in _GSOM_WEATHER_COLS]
+_GSOM_COLS_B    = [f"B_{c}" for c in _GSOM_WEATHER_COLS]
+_GSOM_COLS_PAIR = [f"pair_max_{c}" for c in _GSOM_WEATHER_COLS]
 _ALL_GSOM_COLS  = _GSOM_COLS_A + _GSOM_COLS_B + _GSOM_COLS_PAIR
 
 
-def _apply_gsom_imputation(X: pd.DataFrame, month: int) -> tuple[pd.DataFrame, set[str]]:
+def _apply_gsom_imputation(X: pd.DataFrame, month: int,
+                           airport_a: str = "", airport_b: str = "") -> tuple[pd.DataFrame, set[str]]:
     """
-    Fill NaN GSOM features with the month-level population median.
-    Returns (imputed_df, set_of_columns_that_were_imputed).
-    Pair-level max features are re-derived from the imputed A/B values so they
-    remain internally consistent.
+    Fill weather climate features with real Open-Meteo ERA5 values per airport.
+    Falls back to legacy global medians if Open-Meteo data not available.
+    Returns (filled_df, set_of_columns_that_were_filled).
     """
-    if not _GSOM_MEDIANS:
-        return X, set()
     X = X.copy()
-    imputed: set[str] = set()
-    for col in _ALL_GSOM_COLS:
-        if col not in X.columns:
-            continue
-        if X[col].isna().any() and col in _GSOM_MEDIANS:
-            fill_val = _GSOM_MEDIANS[col].get(month, np.nan)
-            if not np.isnan(fill_val):
-                X[col] = X[col].fillna(fill_val)
-                imputed.add(col)
-    # Re-derive pair-level max features to stay consistent
-    if "A_avg_wind_speed" in X.columns and "B_avg_wind_speed" in X.columns:
-        if "pair_max_avg_wind_speed" in X.columns:
-            X["pair_max_avg_wind_speed"] = X[["A_avg_wind_speed", "B_avg_wind_speed"]].max(axis=1)
-        if "pair_max_precip_days" in X.columns:
-            X["pair_max_precip_days"] = X[["A_precip_days", "B_precip_days"]].max(axis=1)
-        if "pair_max_extreme_precip" in X.columns:
-            X["pair_max_extreme_precip"] = X[["A_extreme_precip", "B_extreme_precip"]].max(axis=1)
-        if "pair_max_total_precip" in X.columns:
-            X["pair_max_total_precip"] = X[["A_total_precip", "B_total_precip"]].max(axis=1)
-        if "pair_max_max_wind_gust" in X.columns:
-            X["pair_max_max_wind_gust"] = X[["A_max_wind_gust", "B_max_wind_gust"]].max(axis=1)
-    return X, imputed
+    filled: set[str] = set()
+
+    if _USE_OPENMETEO and airport_a and airport_b:
+        # Look up real climate values for each airport
+        def _om_row(iata: str) -> dict:
+            mask = (_OM_LOOKUP["iata"] == iata) & (_OM_LOOKUP["Month"] == month)
+            rows = _OM_LOOKUP[mask]
+            return rows.iloc[0].to_dict() if not rows.empty else {}
+
+        row_a = _om_row(airport_a)
+        row_b = _om_row(airport_b)
+
+        for col in _GSOM_WEATHER_COLS:
+            a_col, b_col = f"A_{col}", f"B_{col}"
+            if a_col in X.columns and X[a_col].isna().any() and col in row_a:
+                X[a_col] = X[a_col].fillna(row_a[col])
+                filled.add(a_col)
+            if b_col in X.columns and X[b_col].isna().any() and col in row_b:
+                X[b_col] = X[b_col].fillna(row_b[col])
+                filled.add(b_col)
+
+    else:
+        # Legacy fallback: global monthly medians
+        for col in _ALL_GSOM_COLS:
+            if col not in X.columns:
+                continue
+            if X[col].isna().any() and col in _GSOM_MEDIANS:
+                fill_val = _GSOM_MEDIANS[col].get(month, np.nan)
+                if not np.isnan(fill_val):
+                    X[col] = X[col].fillna(fill_val)
+                    filled.add(col)
+
+    # Always re-derive pair-level max features from A/B values
+    for col in _GSOM_WEATHER_COLS:
+        a_col, b_col, pair_col = f"A_{col}", f"B_{col}", f"pair_max_{col}"
+        if a_col in X.columns and b_col in X.columns and pair_col in X.columns:
+            X[pair_col] = X[[a_col, b_col]].max(axis=1)
+
+    return X, filled
 
 
 FEATURE_COLS = [
@@ -226,55 +267,75 @@ _APP_CACHE = os.path.join(PROCESSED, "app_features_cache.parquet")
 def build_features_df(force_rebuild: bool = False) -> pd.DataFrame:
     """
     Load merged feature table for the app.
-    First run: joins all supplementary parquets + collapses to latest year per
-    (airport_A, airport_B, Month) → saves to app_features_cache.parquet.
-    Subsequent runs: loads cache directly (~1s vs ~60s for full rebuild).
+
+    Build path (priority order):
+      1. Load existing app_features_cache.parquet if present (fast, ~1s)
+      2. If sequence_features.parquet exists: rebuild via full join pipeline
+      3. Fallback: rebuild from committed processed parquets + Open-Meteo
+         (works without sequence_features.parquet — uses enrich_openmeteo logic)
+
+    Set force_rebuild=True or delete app_features_cache.parquet to regenerate.
     """
     if not force_rebuild and os.path.exists(_APP_CACHE):
-        print("Loading app feature cache...")
         return pd.read_parquet(_APP_CACHE)
 
-    print("Building feature cache (one-time, ~60s)...")
-    df = pd.read_parquet(os.path.join(PROCESSED, "sequence_features.parquet"))
-    df["target"] = (df["observed_bad_rate"] > RISK_THRESHOLD).astype(int)
+    seq_path = os.path.join(PROCESSED, "sequence_features.parquet")
+    if os.path.exists(seq_path):
+        # ── Full pipeline rebuild from sequence_features ──────────────────
+        print("Building feature cache from sequence_features (~60s)...")
+        df = pd.read_parquet(seq_path)
+        df["target"] = (df["observed_bad_rate"] > RISK_THRESHOLD).astype(int)
 
-    if "pair_max_weather_rate" not in df.columns and "A_weather_delay_rate" in df.columns:
-        df["pair_max_weather_rate"] = df[["A_weather_delay_rate", "B_weather_delay_rate"]].max(axis=1)
+        if "pair_max_weather_rate" not in df.columns and "A_weather_delay_rate" in df.columns:
+            df["pair_max_weather_rate"] = df[["A_weather_delay_rate",
+                                              "B_weather_delay_rate"]].max(axis=1)
 
-    dfw = _get_dfw_weather()
-    if not dfw.empty:
-        df = df.merge(dfw, on="Month", how="left")
+        dfw = _get_dfw_weather()
+        if not dfw.empty:
+            df = df.merge(dfw, on="Month", how="left")
 
-    tc_path = os.path.join(PROCESSED, "tail_chain_features.parquet")
-    if os.path.exists(tc_path):
-        tc = pd.read_parquet(tc_path)
-        tc_meta = ["airport_A", "airport_B", "Month", "Year"]
-        df = df.merge(tc[tc_meta + [c for c in tc.columns if c not in tc_meta]], on=tc_meta, how="left")
+        tc_path = os.path.join(PROCESSED, "tail_chain_features.parquet")
+        if os.path.exists(tc_path):
+            tc = pd.read_parquet(tc_path)
+            tc_meta = ["airport_A", "airport_B", "Month", "Year"]
+            df = df.merge(tc[tc_meta + [c for c in tc.columns if c not in tc_meta]],
+                          on=tc_meta, how="left")
 
-    ap_path = os.path.join(PROCESSED, "airport_cascade_features.parquet")
-    if os.path.exists(ap_path):
-        ap = pd.read_parquet(ap_path)
-        ap_feat = [c for c in ap.columns if c not in ("airport", "Month")]
-        for side in ("A", "B"):
-            rename = {c: f"{side}_ap_{c}" for c in ap_feat}
-            merged = ap.rename(columns={"airport": f"airport_{side}", **rename})
-            df = df.merge(merged[[f"airport_{side}", "Month"] + list(rename.values())],
-                          on=[f"airport_{side}", "Month"], how="left")
-        if "A_ap_cascade_rate" in df.columns and "B_ap_cascade_rate" in df.columns:
-            df["pair_cascade_product"] = df["A_ap_cascade_rate"] * df["B_ap_cascade_rate"]
-            df["pair_max_cascade_rate"] = df[["A_ap_cascade_rate", "B_ap_cascade_rate"]].max(axis=1)
+        ap_path = os.path.join(PROCESSED, "airport_cascade_features.parquet")
+        if os.path.exists(ap_path):
+            ap = pd.read_parquet(ap_path)
+            ap_feat = [c for c in ap.columns if c not in ("airport", "Month")]
+            for side in ("A", "B"):
+                rename = {c: f"{side}_ap_{c}" for c in ap_feat}
+                merged = ap.rename(columns={"airport": f"airport_{side}", **rename})
+                df = df.merge(merged[[f"airport_{side}", "Month"] + list(rename.values())],
+                              on=[f"airport_{side}", "Month"], how="left")
+            if "A_ap_cascade_rate" in df.columns and "B_ap_cascade_rate" in df.columns:
+                df["pair_cascade_product"]  = df["A_ap_cascade_rate"] * df["B_ap_cascade_rate"]
+                df["pair_max_cascade_rate"] = df[["A_ap_cascade_rate",
+                                                   "B_ap_cascade_rate"]].max(axis=1)
 
-    mhc_path = os.path.join(PROCESSED, "multihop_cascade_features.parquet")
-    if os.path.exists(mhc_path):
-        mhc = pd.read_parquet(mhc_path)
-        mhc_meta = ["airport_A", "airport_B", "Month", "Year"]
-        df = df.merge(mhc[mhc_meta + [c for c in mhc.columns if c not in mhc_meta]], on=mhc_meta, how="left")
+        mhc_path = os.path.join(PROCESSED, "multihop_cascade_features.parquet")
+        if os.path.exists(mhc_path):
+            mhc = pd.read_parquet(mhc_path)
+            mhc_meta = ["airport_A", "airport_B", "Month", "Year"]
+            df = df.merge(mhc[mhc_meta + [c for c in mhc.columns if c not in mhc_meta]],
+                          on=mhc_meta, how="left")
 
-    df = (
-        df.sort_values("Year")
-        .groupby(["airport_A", "airport_B", "Month"], as_index=False)
-        .last()
-    )
+        df = (
+            df.sort_values("Year")
+            .groupby(["airport_A", "airport_B", "Month"], as_index=False)
+            .last()
+        )
+
+    else:
+        # ── Fallback: rebuild from committed parquets + Open-Meteo ────────
+        print("sequence_features.parquet not found — rebuilding from processed files...")
+        import sys, importlib
+        sys.path.insert(0, os.path.join(os.path.dirname(__file__), "..", "src"))
+        enrich = importlib.import_module("enrich_openmeteo")
+        df = enrich.build_pair_features()
+
     df.to_parquet(_APP_CACHE, index=False)
     print(f"Feature cache saved → {_APP_CACHE} ({len(df):,} rows)")
     return df
@@ -312,7 +373,7 @@ class RiskPredictor:
         row["Month"] = month
 
         X_raw = row[self.feature_cols].to_frame().T.astype(float)
-        X, gsom_imputed = _apply_gsom_imputation(X_raw, month)
+        X, gsom_imputed = _apply_gsom_imputation(X_raw, month, airport_a, airport_b)
         prob_raw = float(self.model.predict_proba(X)[0, 1])
         prob = _calibrate(prob_raw)   # map to observed-bad-rate scale
 
