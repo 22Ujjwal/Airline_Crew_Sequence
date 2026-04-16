@@ -41,16 +41,13 @@ START_DATE = "2015-01-01"
 END_DATE   = "2024-12-31"
 API_URL    = "https://archive-api.open-meteo.com/v1/archive"
 
-# Monthly aggregation variables — 1 row per month instead of 365 rows/year.
-# 30x less data per request → avoids rate limits, faster fetch.
-MONTHLY_VARS = [
-    "temperature_2m_max",       # mean of daily max temps
-    "temperature_2m_min",       # mean of daily min temps
-    "precipitation_sum",        # total monthly precip
-    "snowfall_sum",             # total monthly snowfall
-    "wind_speed_10m_max",       # mean of daily max wind speed
-    "wind_gusts_10m_max",       # mean of daily max gusts
-    # precipitation_hours is daily-only — not available in monthly aggregation
+DAILY_VARS = [
+    "temperature_2m_max",
+    "temperature_2m_min",
+    "precipitation_sum",
+    "snowfall_sum",
+    "wind_speed_10m_max",
+    "wind_gusts_10m_max",
 ]
 
 RATE_LIMIT_WAIT_S = 120   # seconds to wait on 429 before retrying
@@ -60,17 +57,16 @@ RATE_LIMIT_WAIT_S = 120   # seconds to wait on 429 before retrying
 
 def fetch_airport(iata: str, lat: float, lon: float, retries: int = 4) -> pd.DataFrame | None:
     """
-    Fetch monthly ERA5 climate data for one airport (2015-2024).
-    Uses the native monthly aggregation endpoint — 1 row per month, 120 rows total.
-    Returns a DataFrame or None on persistent failure.
+    Fetch daily ERA5 data for one airport (2015-2024) and aggregate to monthly.
+    Returns a DataFrame with 120 rows (1 per month) or None on persistent failure.
     """
     params = {
         "latitude":           round(lat, 4),
         "longitude":          round(lon, 4),
         "start_date":         START_DATE,
         "end_date":           END_DATE,
-        "monthly":            ",".join(MONTHLY_VARS),
-        "timezone":           "auto",
+        "daily":              ",".join(DAILY_VARS),
+        "timezone":           "UTC",
         "temperature_unit":   "fahrenheit",
         "wind_speed_unit":    "mph",
         "precipitation_unit": "inch",
@@ -78,7 +74,7 @@ def fetch_airport(iata: str, lat: float, lon: float, retries: int = 4) -> pd.Dat
 
     for attempt in range(retries):
         try:
-            resp = requests.get(API_URL, params=params, timeout=45)
+            resp = requests.get(API_URL, params=params, timeout=60)
             if resp.status_code == 429:
                 wait = RATE_LIMIT_WAIT_S * (attempt + 1)
                 print(f"\n  Rate limited — waiting {wait}s before retry ({iata}) ...")
@@ -98,38 +94,48 @@ def fetch_airport(iata: str, lat: float, lon: float, retries: int = 4) -> pd.Dat
     else:
         return None
 
-    monthly = data.get("monthly", {})
-    if not monthly or "time" not in monthly:
-        print(f"  Empty monthly response for {iata}")
+    daily = data.get("daily", {})
+    if not daily or "time" not in daily:
+        print(f"  Empty daily response for {iata}")
         return None
 
     df = pd.DataFrame({
-        "date":        pd.to_datetime(monthly["time"]),
-        "avg_wind_mph":    monthly.get("wind_speed_10m_max"),     # mean of daily max
-        "max_gust_mph":    monthly.get("wind_gusts_10m_max"),     # mean of daily gusts
-        "total_precip_in": monthly.get("precipitation_sum"),
-        "snow_in":         monthly.get("snowfall_sum"),
-        "avg_temp_max_f":  monthly.get("temperature_2m_max"),
-        "avg_temp_min_f":  monthly.get("temperature_2m_min"),
+        "date":      pd.to_datetime(daily["time"]),
+        "wind_max":  daily.get("wind_speed_10m_max"),
+        "gust_max":  daily.get("wind_gusts_10m_max"),
+        "precip":    daily.get("precipitation_sum"),
+        "snow":      daily.get("snowfall_sum"),
+        "temp_max":  daily.get("temperature_2m_max"),
+        "temp_min":  daily.get("temperature_2m_min"),
     })
-
     df["year"]  = df["date"].dt.year
     df["month"] = df["date"].dt.month
 
-    # Derived columns that mirror old GSOM feature names
-    # precip_days: estimate from total precip (avg ~0.1 in/day threshold → ~10 days per inch)
-    df["precip_days"]     = (df["total_precip_in"].fillna(0) * 10).clip(0, 31).round()
-    df["snow_days"]       = (df["snow_in"].fillna(0) > 0.1).astype(int)            # binary month flag
-    df["severe_wx_days"]  = (df["total_precip_in"].fillna(0) > 4.0).astype(int)    # >4in/mo = heavy month
-    df["extreme_cold_days"] = (df["avg_temp_min_f"].fillna(40) < 32).astype(int)
-    df["extreme_heat_days"] = (df["avg_temp_max_f"].fillna(70) > 95).astype(int)
+    # Aggregate daily → monthly
+    grp = df.groupby(["year", "month"])
+    out = pd.DataFrame({
+        "year":  grp["year"].first(),
+        "month": grp["month"].first(),
+        "avg_wind_mph":      grp["wind_max"].mean(),
+        "max_gust_mph":      grp["gust_max"].max(),
+        "total_precip_in":   grp["precip"].sum(),
+        "snow_in":           grp["snow"].sum(),
+        "avg_temp_max_f":    grp["temp_max"].mean(),
+        "avg_temp_min_f":    grp["temp_min"].mean(),
+        "precip_days":       grp["precip"].apply(lambda x: (x.fillna(0) > 0.1).sum()),
+        "extreme_cold_days": grp["temp_min"].apply(lambda x: (x.fillna(40) < 32).sum()),
+        "extreme_heat_days": grp["temp_max"].apply(lambda x: (x.fillna(70) > 95).sum()),
+    }).reset_index(drop=True)
 
-    df["iata"] = iata
+    out["snow_days"]      = (out["snow_in"].fillna(0) > 0.1).astype(int)
+    out["severe_wx_days"] = (out["total_precip_in"].fillna(0) > 4.0).astype(int)
+    out["iata"] = iata
+
     keep = ["iata", "year", "month", "avg_wind_mph", "max_gust_mph", "total_precip_in",
             "precip_days", "snow_days", "severe_wx_days",
             "avg_temp_max_f", "avg_temp_min_f",
             "extreme_cold_days", "extreme_heat_days"]
-    return df[keep]
+    return out[keep]
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
