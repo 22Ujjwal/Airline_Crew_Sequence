@@ -43,14 +43,18 @@ FEATURE_COLS = [
     "pair_weather_rate_sum", "pair_avg_weather_delay_min", "both_high_risk",
     # Temporal
     "Month", "is_spring_summer", "median_turnaround_min",
-    # GSOM weather features (wind + precip; ~55% airports have station coverage)
-    # XGBoost handles NaN natively — missing airports simply skip these splits
+    # GSOM weather features (wind + precip; NaNs filled by OpenMeteo join in load_features)
     "A_avg_wind_speed", "A_precip_days", "A_extreme_precip",
     "A_total_precip", "A_max_wind_gust",
     "B_avg_wind_speed", "B_precip_days", "B_extreme_precip",
     "B_total_precip", "B_max_wind_gust",
     "pair_max_avg_wind_speed", "pair_max_precip_days",
     "pair_max_extreme_precip", "pair_max_total_precip", "pair_max_max_wind_gust",
+    # OpenMeteo-only features (snow, severe wx, temp extremes — 204/204 airport coverage)
+    "A_snow_days", "A_severe_wx_days", "A_extreme_cold_days", "A_extreme_heat_days",
+    "B_snow_days", "B_severe_wx_days", "B_extreme_cold_days", "B_extreme_heat_days",
+    "pair_max_snow_days", "pair_max_severe_wx_days",
+    "pair_max_extreme_cold_days", "pair_max_extreme_heat_days",
     # DFW hub weather (all sequences pass through DFW)
     "DFW_weather_delay_rate", "DFW_weather_cancel_rate",
     "DFW_avg_weather_delay_min", "DFW_p95_weather_delay_min",
@@ -135,6 +139,47 @@ def load_features():
     # Join DFW hub weather by month
     dfw = get_dfw_weather()
     df = df.merge(dfw, on="Month", how="left")
+
+    # Join OpenMeteo ERA5 weather — fills GSOM NaNs + adds new weather features
+    # 204/204 airport coverage → reduces weather NaN rate from ~42% to ~0%
+    om_path = os.path.join(PROCESSED_DIR, "openmeteo_airport_monthly.parquet")
+    if os.path.exists(om_path):
+        om = pd.read_parquet(om_path).rename(columns={"year": "Year", "month": "Month"})
+        OM_FILL = {                    # GSOM col → openmeteo col (fill NaNs only)
+            "avg_wind_speed":  "avg_wind_mph",
+            "max_wind_gust":   "max_gust_mph",
+            "total_precip":    "total_precip_in",
+            "precip_days":     "precip_days",
+        }
+        OM_NEW = [                     # openmeteo-only cols (add fresh)
+            "snow_days", "severe_wx_days", "extreme_cold_days", "extreme_heat_days",
+        ]
+        om_keep = ["iata", "Year", "Month"] + list(OM_FILL.values()) + OM_NEW
+        om = om[[c for c in om_keep if c in om.columns]]
+
+        for side, airport_col in [("A", "airport_A"), ("B", "airport_B")]:
+            om_side = om.rename(columns={"iata": airport_col})
+            df = df.merge(om_side, on=[airport_col, "Month", "Year"], how="left")
+            for feat, om_col in OM_FILL.items():
+                dst = f"{side}_{feat}"
+                if dst in df.columns and om_col in df.columns:
+                    df[dst] = df[dst].fillna(df[om_col])
+                df = df.drop(columns=[om_col], errors="ignore")
+            for om_col in OM_NEW:
+                dst = f"{side}_{om_col}"
+                if om_col in df.columns:
+                    df = df.rename(columns={om_col: dst})
+
+        for feat in ["avg_wind_speed", "max_wind_gust", "total_precip", "precip_days",
+                     "snow_days", "severe_wx_days", "extreme_cold_days", "extreme_heat_days"]:
+            a_col, b_col = f"A_{feat}", f"B_{feat}"
+            if a_col in df.columns and b_col in df.columns:
+                df[f"pair_max_{feat}"] = df[[a_col, b_col]].max(axis=1)
+
+        null_after = df["A_avg_wind_speed"].isnull().mean() if "A_avg_wind_speed" in df.columns else 1.0
+        print(f"OpenMeteo joined: A_avg_wind_speed null = {null_after:.1%} (was ~42%)")
+    else:
+        print("openmeteo_airport_monthly.parquet not found — skipping OpenMeteo join")
 
     # Join tail-chain features (crew duty proxy via aircraft rotation)
     tc_path = os.path.join(PROCESSED_DIR, "tail_chain_features.parquet")
