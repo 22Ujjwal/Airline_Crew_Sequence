@@ -41,10 +41,7 @@ START_DATE = "2015-01-01"
 END_DATE   = "2024-12-31"
 API_URL    = "https://archive-api.open-meteo.com/v1/archive"
 
-<<<<<<< Updated upstream
-=======
 # Daily variables — archive API doesn't support monthly param; aggregate in pandas.
->>>>>>> Stashed changes
 DAILY_VARS = [
     "temperature_2m_max",
     "temperature_2m_min",
@@ -52,10 +49,6 @@ DAILY_VARS = [
     "snowfall_sum",
     "wind_speed_10m_max",
     "wind_gusts_10m_max",
-<<<<<<< Updated upstream
-=======
-    "precipitation_hours",
->>>>>>> Stashed changes
 ]
 
 RATE_LIMIT_WAIT_S = 60   # seconds to wait on 429 before retrying
@@ -64,24 +57,17 @@ RATE_LIMIT_WAIT_S = 60   # seconds to wait on 429 before retrying
 # ── Fetch one airport ─────────────────────────────────────────────────────────
 
 def fetch_airport(iata: str, lat: float, lon: float, retries: int = 4) -> pd.DataFrame | None:
-<<<<<<< Updated upstream
     """
     Fetch daily ERA5 data for one airport (2015-2024) and aggregate to monthly.
     Returns a DataFrame with 120 rows (1 per month) or None on persistent failure.
     """
-=======
->>>>>>> Stashed changes
     params = {
         "latitude":           round(lat, 4),
         "longitude":          round(lon, 4),
         "start_date":         START_DATE,
         "end_date":           END_DATE,
         "daily":              ",".join(DAILY_VARS),
-<<<<<<< Updated upstream
         "timezone":           "UTC",
-=======
-        "timezone":           "auto",
->>>>>>> Stashed changes
         "temperature_unit":   "fahrenheit",
         "wind_speed_unit":    "mph",
         "precipitation_unit": "inch",
@@ -115,7 +101,6 @@ def fetch_airport(iata: str, lat: float, lon: float, retries: int = 4) -> pd.Dat
         return None
 
     df = pd.DataFrame({
-<<<<<<< Updated upstream
         "date":      pd.to_datetime(daily["time"]),
         "wind_max":  daily.get("wind_speed_10m_max"),
         "gust_max":  daily.get("wind_gusts_10m_max"),
@@ -123,21 +108,10 @@ def fetch_airport(iata: str, lat: float, lon: float, retries: int = 4) -> pd.Dat
         "snow":      daily.get("snowfall_sum"),
         "temp_max":  daily.get("temperature_2m_max"),
         "temp_min":  daily.get("temperature_2m_min"),
-=======
-        "date":         pd.to_datetime(daily["time"]),
-        "wind_max":     daily.get("wind_speed_10m_max"),
-        "gust_max":     daily.get("wind_gusts_10m_max"),
-        "precip":       daily.get("precipitation_sum"),
-        "snow":         daily.get("snowfall_sum"),
-        "precip_hrs":   daily.get("precipitation_hours"),
-        "temp_max":     daily.get("temperature_2m_max"),
-        "temp_min":     daily.get("temperature_2m_min"),
->>>>>>> Stashed changes
     })
     df["year"]  = df["date"].dt.year
     df["month"] = df["date"].dt.month
 
-<<<<<<< Updated upstream
     # Aggregate daily → monthly
     grp = df.groupby(["year", "month"])
     out = pd.DataFrame({
@@ -158,38 +132,11 @@ def fetch_airport(iata: str, lat: float, lon: float, retries: int = 4) -> pd.Dat
     out["severe_wx_days"] = (out["total_precip_in"].fillna(0) > 4.0).astype(int)
     out["iata"] = iata
 
-=======
-    # daily flags before groupby
-    df["_precip_day"]   = (df["precip"].fillna(0) > 0.1).astype(int)
-    df["_snow_day"]     = (df["snow"].fillna(0) > 0.1).astype(int)
-    df["_cold_day"]     = (df["temp_min"].fillna(40) < 32).astype(int)
-    df["_heat_day"]     = (df["temp_max"].fillna(70) > 95).astype(int)
-
-    g = df.groupby(["year", "month"])
-    monthly = pd.DataFrame({
-        "avg_wind_mph":      g["wind_max"].mean(),
-        "max_gust_mph":      g["gust_max"].max(),
-        "total_precip_in":   g["precip"].sum(),
-        "precip_days":       g["_precip_day"].sum(),
-        "snow_days":         g["_snow_day"].sum(),
-        "avg_temp_max_f":    g["temp_max"].mean(),
-        "avg_temp_min_f":    g["temp_min"].mean(),
-        "extreme_cold_days": g["_cold_day"].sum(),
-        "extreme_heat_days": g["_heat_day"].sum(),
-        "severe_wx_days":    (g["precip"].sum() > 4.0).astype(int),
-    }).reset_index()
-
-    monthly["iata"] = iata
->>>>>>> Stashed changes
     keep = ["iata", "year", "month", "avg_wind_mph", "max_gust_mph", "total_precip_in",
             "precip_days", "snow_days", "severe_wx_days",
             "avg_temp_max_f", "avg_temp_min_f",
             "extreme_cold_days", "extreme_heat_days"]
-<<<<<<< Updated upstream
     return out[keep]
-=======
-    return monthly[keep]
->>>>>>> Stashed changes
 
 
 # ── Main ─────────────────────────────────────────────────────────────────────
