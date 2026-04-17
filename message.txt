@@ -1,0 +1,465 @@
+================================================================================
+AA EPPS DATA CHALLENGE — FULL PROJECT DOCUMENTATION
+Session: 2026-04-17 | Author: Claude (Sonnet 4.6) + Ujjwal Gupta
+================================================================================
+
+This document is a complete handoff for any engineer or Claude instance picking
+up this project. It covers project goal, data, pipeline, model, current state,
+ML strategy, feature engineering, and exact next steps.
+
+--------------------------------------------------------------------------------
+1. PROJECT GOAL
+--------------------------------------------------------------------------------
+
+Build a risk-scoring system for American Airlines crew sequences at DFW hub.
+
+A "sequence" is a tail-matched aircraft rotation:
+  - Crew flies A → DFW (inbound leg)
+  - Same aircraft, same crew: DFW → B (outbound leg)
+  - Turnaround window: 30–240 minutes at DFW
+
+Predict: probability that this rotation experiences weather disruption.
+
+Disruption = 1 if:
+  - Weather delay >= 15 min on either leg, OR
+  - Cascade: inbound late → late-aircraft departure on outbound (same tail)
+
+Deliverables:
+  1. XGBoost classifier with isotonic calibration
+  2. Streamlit dashboard (HuggingFace Spaces)
+  3. Hungarian algorithm sequence optimizer
+
+HuggingFace Space: itaykadosh/AA-EPPS-Data-Challenge
+GitHub (primary):  https://github.com/Optimax14/AA-EPPS-Data-Challenge
+GitHub (fork):     https://github.com/22Ujjwal/Airline_Crew_Sequence
+
+--------------------------------------------------------------------------------
+2. REPOSITORY STRUCTURE
+--------------------------------------------------------------------------------
+
+AA-EPPS-Data-Challenge/
+├── app/
+│   ├── app.py              Main Streamlit UI (6 tabs)
+│   ├── predictor.py        Model wrapper + GSOM imputation + SHAP
+│   ├── optimizer.py        Hungarian algorithm sequence optimizer
+│   ├── live_flights.py     Live schedule sources (AviationStack / BTS / OpenSky)
+│   └── airports.py         Airport metadata helpers
+│
+├── src/
+│   ├── download_bts.py             Step 1: Download BTS On-Time data
+│   ├── feature_engineering.py      Step 2: Build tail-matched sequences
+│   ├── enrich_features.py          Step 3: Add GSOM weather features
+│   ├── fetch_openmeteo.py          Fetch ERA5 weather (replaces GSOM)
+│   ├── tail_chain_features.py      Step 4: Crew duty proxy features
+│   ├── cascade_chain_features.py   Step 5: Airport cascade propagation
+│   ├── multihop_dfw_cascade.py     Step 6: Multi-hop DFW cascade
+│   ├── model.py                    Step 7: Train XGBoost (PRIMARY)
+│   ├── model_lgbm.py               Alternate LightGBM model
+│   ├── model_enhanced.py           XGBoost + enhanced features variant
+│   ├── tune_hyperparams.py         Optuna hyperparameter search
+│   ├── predict.py                  Batch/live inference
+│   ├── ood_validation.py           Out-of-distribution validation
+│   ├── stress_test.py              Calibration + storm replay tests
+│   ├── weather_benchmark.py        Benchmark weather signal
+│   ├── visualize.py                Standalone plots
+│   └── weather.py                  Weather utilities (IEM ASOS + METAR)
+│
+├── data/
+│   ├── raw/
+│   │   └── bts_all_dfw_2024.parquet     Only 2024 present locally (13 MB)
+│   └── processed/                        All model artifacts (see §4)
+│
+├── Dockerfile
+├── requirements.txt
+├── MODEL_REGISTRY.md
+└── CLAUDE.md
+
+--------------------------------------------------------------------------------
+3. ENVIRONMENT SETUP
+--------------------------------------------------------------------------------
+
+Recommended: Conda Python 3.11
+
+  conda create -n aadata python=3.11
+  conda activate aadata
+  pip install -r requirements.txt
+  pip install lightgbm optuna huggingface_hub
+
+requirements.txt covers:
+  pandas, numpy, xgboost>=2.0, scikit-learn, scipy, matplotlib, seaborn,
+  requests, pyarrow, tqdm, streamlit, plotly, shap, airportsdata, pytz
+
+NOTE: On the local Mac (ujjwalgupta), conda pip is broken.
+Use /Users/ujjwalgupta/anaconda3/bin/python3 directly.
+
+GPU: XGBoost uses device="cuda" in src/model.py:241. Falls back to CPU
+automatically if no CUDA. GPU ~3 min, CPU ~15 min on 398k rows.
+
+--------------------------------------------------------------------------------
+4. DATA FILES (data/processed/)
+--------------------------------------------------------------------------------
+
+File                              Size      Shape           Description
+─────────────────────────────────────────────────────────────────────────────
+sequence_features.parquet         17.5 MB   398098 × 54     CORE training set.
+                                                             Tail-matched A→DFW→B
+                                                             pairs, 2015–2024.
+                                                             Target: observed_bad_rate
+
+pair_risk_scores.parquet          1.7 MB    156212 × 8      Calibrated risk per
+                                                             (airport_A, airport_B,
+                                                             Month). App uses this.
+
+xgb_model.json                    2.7 MB    —               XGBoost v7. NEEDS RETRAIN
+                                                             (v8 in progress).
+
+calibration_isotonic.json         12.5 KB   309 breakpoints Isotonic regression
+                                                             x=raw score, y=calibrated.
+                                                             NEEDS REFIT after retrain.
+
+gsom_month_medians.json           3.9 KB    —               NaN imputation values
+                                                             for weather features.
+                                                             NEEDS REFIT after retrain.
+
+openmeteo_airport_monthly.parquet 531 KB    24480 × 13      ERA5 weather, 204 airports,
+                                                             2015–2024. UPDATED THIS
+                                                             SESSION (was 28 airports).
+
+airport_features.parquet          118 KB    2303 × 12       BTS weather stats per
+                                                             airport × month.
+
+tail_chain_features.parquet       7.5 MB    349387 × 20     Crew duty proxy via
+                                                             aircraft tail rotation.
+
+airport_cascade_features.parquet  70 KB     2301 × 6        Cascade propagation
+                                                             index per airport × month.
+
+multihop_cascade_features.parquet 2.3 MB    349387 × 13     Multi-hop A→DFW→B→DFW→C
+                                                             cascade features.
+
+dfw_weather_monthly.parquet       4.2 KB    12 × 5          DFW hub weather by month.
+                                                             All sequences touch DFW.
+
+_openmeteo_raw_cache.json         2.4 MB    204 airports    Raw ERA5 API cache.
+                                                             Used to regenerate parquet.
+
+--------------------------------------------------------------------------------
+5. PIPELINE (RUN ORDER)
+--------------------------------------------------------------------------------
+
+Step 1  download_bts.py          → data/raw/bts_all_dfw_*.parquet
+        python src/download_bts.py --years 2015 2016 2017 2018 2019 2022 2023 2024
+        NOTE: Only 2024 present locally. Need to re-download 2015–2023.
+        Exclude COVID years 2020–2021 (abnormal ops).
+
+Step 2  feature_engineering.py   → sequence_features.parquet   [DONE — file present]
+        Builds tail-matched pairs: inbound A→DFW merged with outbound DFW→B
+        on same Tail_Number + FlightDate, 30–240 min turnaround.
+        Labels: target=1 if observed_bad_rate > 0.25.
+
+Step 3  enrich_features.py       → adds GSOM cols to sequence_features  [DONE]
+        Adds A_avg_wind_speed, A_precip_days, A_extreme_precip, etc.
+        Uses NOAA CDO API (token: SBRhkMknyZHEHobLChLzPRVSgtXUlmwL).
+        Cache: data/processed/monthly_weather_gsom.parquet (NOT present locally —
+        but GSOM columns already embedded in sequence_features.parquet).
+
+Step 3b fetch_openmeteo.py       → openmeteo_airport_monthly.parquet    [DONE — 204 airports]
+        ERA5 replacement for GSOM. Free, no API key. Covers all airports.
+        Run: python src/fetch_openmeteo.py
+        Uses _openmeteo_raw_cache.json to skip API calls if cache present.
+
+Step 4  tail_chain_features.py   → tail_chain_features.parquet          [DONE]
+Step 5  cascade_chain_features.py → airport_cascade_features.parquet    [DONE]
+Step 6  multihop_dfw_cascade.py  → multihop_cascade_features.parquet    [DONE]
+
+Step 7  model.py                 → xgb_model.json + pair_risk_scores.parquet
+        READY TO RUN. python src/model.py
+        Uses CUDA if available (device="cuda" in model.py:241).
+
+Step 8  fit_calibration          → calibration_isotonic.json + gsom_month_medians.json
+        IMPORTANT: Script lives at /tmp/fit_calibration.py on training machine.
+        Not committed to repo. Move to src/ after training.
+
+--------------------------------------------------------------------------------
+6. MODEL ARCHITECTURE
+--------------------------------------------------------------------------------
+
+PRIMARY MODEL: XGBoost v7 (current) / v8 (pending retrain)
+
+  Val AUC:         0.825
+  Val AP:          0.445
+  Positive rate:   11.45%
+  Training rows:   398,098
+  Val split:       Time-based (train < 2024, val = 2024)
+  Features:        70 across 8 groups
+
+FEATURE GROUPS (70 total):
+
+  Origin BTS (8):   weather_delay_rate, cancel_rate, avg/p75/p95 delay, NAS rate
+  Dest BTS (8):     same for airport B
+  Pair BTS (6):     combined/max/min/sum weather rate, avg delay, both_high_risk
+  Temporal (6):     Month, is_spring_summer, median_turnaround_min, season dummies
+  Origin GSOM (5):  avg_wind_speed, precip_days, extreme_precip, total_precip, max_wind_gust
+  Dest GSOM (5):    same for airport B
+  Pair GSOM (5):    pair_max_* for each GSOM feature
+  DFW Hub (4):      DFW_weather_delay_rate, cancel_rate, avg/p95 delay_min
+  Tail-Chain (13):  legs_before, block_before, duty_start_hour, total_duty, fdp_util,
+                    fdp_overrun, wocl_rate, legs_after, legs_in_day, downstream_rate,
+                    cascade_late_rate/min/amplif
+  Airport Cascade (6): A/B ap_cascade_rate, ap_cascade_given_late, pair_cascade_product/max
+  Multi-Hop (8):    n_hops, total_late_min, cascade_hop_rate, cascade_depth,
+                    unique_airports, recovery_rate
+  Interaction (3):  A_B_weather_coincidence, B_given_A_risk_ratio, pair_max_weather_rate
+
+LABELING:
+  target = 1 if observed_bad_rate > 0.25
+  scale_pos_weight = 7.73 (class imbalance)
+  observed_bad_rate = fraction of tail-matched rotations with weather delay >= 15 min
+                      OR cascade (inbound late → late-aircraft outbound)
+
+CALIBRATION:
+  Raw XGBoost log-odds → isotonic regression → observed bad rate scale
+  309 breakpoints in calibration_isotonic.json
+  Example: MCO→LAX June: calibrated 9.7%, observed 11.6%
+
+ALTERNATE: LightGBM v5
+  NOT yet rebuilt on tail-matched data (uses old corridor-day dataset, inflated AUC).
+  Retrain using src/model_lgbm.py after XGBoost v8 is done.
+
+--------------------------------------------------------------------------------
+7. KNOWN BUGS AND FIXES (applied this session)
+--------------------------------------------------------------------------------
+
+BUG 1 (FIXED): pair_max_weather_rate missing
+  src/model.py had "pair_max_weather_rate" in FEATURE_COLS but never computed it.
+  Would cause KeyError on df[feature_cols].
+  FIX applied at src/model.py ~line 182:
+    df["pair_max_weather_rate"] = df[["A_weather_delay_rate",
+                                      "B_weather_delay_rate"]].max(axis=1)
+
+BUG 2 (KNOWN): GSOM weather 42% null
+  sequence_features.parquet has GSOM-named weather columns (A_avg_wind_speed etc.)
+  but ~42% are NaN because GSOM only covered ~58% of airports.
+  XGBoost handles NaN natively — safe to train as-is.
+  FIX (not yet done): join openmeteo data in load_features() to fill these NaNs.
+  Column mapping for the join:
+    openmeteo "avg_wind_mph"    → sequence_features "A_avg_wind_speed"
+    openmeteo "max_gust_mph"    → sequence_features "A_max_wind_gust"
+    openmeteo "total_precip_in" → sequence_features "A_total_precip"
+    openmeteo "precip_days"     → sequence_features "A_precip_days"
+  Join key: (airport_A/airport_B, Month) — aggregate openmeteo across years first.
+
+BUG 3 (KNOWN): fit_calibration.py not in repo
+  Lives at /tmp/fit_calibration.py on the machine where training happened.
+  TODO: move to src/ and call from model.py:main().
+
+BUG 4 (KNOWN): thunder_days all zeros
+  _openmeteo_raw_cache.json has a thunder_days column but all values = 0.
+  ERA5 daily API does not capture sub-daily convective events.
+  Do NOT add thunder_days as a feature — it is useless.
+
+--------------------------------------------------------------------------------
+8. ML STRATEGY (designed this session)
+--------------------------------------------------------------------------------
+
+PROBLEM FRAMING:
+  - Binary classification (NOT regression) — calibrated probability output
+  - Target: observed_bad_rate > 0.25 threshold (absolute, not median-split)
+  - Dual-head option for future: Head 1 binary (AUC/AP), Head 2 regression on
+    observed_bad_rate (for optimizer ranking)
+
+DATA STRATEGY:
+  - Global model across all airports (NOT per-airport — too few sequences per pair)
+  - Airport clustering (KMeans k=5) as FEATURE, not model split
+  - Clusters: hub-congested, weather-dominated, small-regional, sun-belt, coastal-convective
+  - Time split: train 2015–2022, val 2023, test 2024 (NEVER random CV)
+
+VALIDATION:
+  - Rolling window CV for hyperparameter tuning:
+      Fold 1: train 2015–2020, val 2021
+      Fold 2: train 2015–2021, val 2022
+      Fold 3: train 2015–2022, val 2023
+  - Metrics in priority order: AP > AUC > Calibration ECE > Top-decile lift > Brier
+
+MODEL STACK:
+  Tier 1: XGBoost v8 (retrain with new features) — target AUC 0.835
+  Tier 2: LightGBM rebuilt on tail-matched data  — target AUC ~0.83
+  Tier 3: Ensemble blend 0.55*XGB + 0.45*LGBM   — target AUC 0.845
+
+LEAKAGE RISKS (do NOT use these as features):
+  - observed_bad_rate (it IS the target)
+  - n_sequences for current month (known only after month ends)
+  - avg_risk_score / max_risk_score (model output — circular)
+  - Same-month BTS delay stats computed on current month
+  - prev_month_bad_rate without proper shift(1) grouped by (airport_A, airport_B)
+
+--------------------------------------------------------------------------------
+9. FEATURE ENGINEERING — PRIORITIZED LIST
+--------------------------------------------------------------------------------
+
+MVP 15 FEATURES (get to AUC ~0.80 with these alone):
+
+  # Weather (5)
+  A_precip_days               Days precip > 0.1 in at origin
+  A_max_gust_mph              Monthly max wind gust (from openmeteo)
+  DFW_weather_delay_rate      Hub shared risk — all sequences pass DFW
+  pair_max_precip_days        max(A_precip_days, B_precip_days)
+  A_severe_wx_days            Days total precip > 4 in (heavy event proxy)
+
+  # Temporal (3)
+  prev_month_bad_rate         Storm clustering — bad months follow bad months
+  same_month_prior_year_bad_rate  Seasonal memory
+  is_peak_season              Month in {6,7,8,12}
+
+  # Network (4)
+  A_ap_cascade_rate           Airport propagation history
+  tc_cascade_late_rate        Tail-level cascade rate
+  mhc_cascade_hop_rate        Network reach of disruption
+  pair_cascade_product        A_ap_cascade_rate × B_ap_cascade_rate
+
+  # Ops (2)
+  median_turnaround_min       Ground time buffer — key recovery signal
+  tc_fdp_util_mean            Crew FDP utilization ratio
+
+  # Static (1)
+  A_weather_delay_rate        Historical baseline disruption rate
+
+HIGH-VALUE ADDITIONS FOR V2:
+
+  A_precip_intensity          total_precip / (precip_days + 1) — heavy vs drizzle
+  B_precip_intensity          Same for airport B
+  A_thermal_spread            avg_temp_max - avg_temp_min — convective instability
+  A_extreme_cold_days         Days min temp < 32°F — de-ice queue risk
+  A_extreme_heat_days         Days max temp > 95°F — weight restrictions
+  pair_wx_coincidence         A_precip_days × B_precip_days
+  month_sin / month_cos       sin/cos(2π×month/12) — cyclical encoding
+  tc_fdp_overrun_rate         Fraction where FDP exceeds legal limit
+  tc_wocl_rate                Night ops crossing 0200–0559 local
+  mhc_total_late_min_mean     Total accumulated late minutes across chain
+  A_hub_centrality            PageRank on delay-weighted airport graph
+  A_cluster_id                KMeans cluster (one-hot, k=5)
+
+--------------------------------------------------------------------------------
+10. CURRENT STATUS AND NEXT STEPS
+--------------------------------------------------------------------------------
+
+COMPLETED THIS SESSION:
+  [x] openmeteo expanded: 28 → 204 airports (data/processed/openmeteo_airport_monthly.parquet)
+  [x] sequence_features.parquet restored (398k rows, all years 2015–2024 ex-COVID)
+  [x] Bug fix: pair_max_weather_rate now computed in src/model.py load_features()
+  [x] App cache cleared: data/processed/app_features_cache.parquet deleted
+
+READY TO RUN NOW:
+  python src/model.py
+  (requires CUDA machine or ~15 min on CPU)
+
+NEXT STEPS IN ORDER:
+
+  1. TRAIN XGBoost v8
+     python src/model.py
+     Expected: AUC 0.825–0.835, AP 0.44–0.46
+
+  2. REFIT CALIBRATION
+     python /tmp/fit_calibration.py
+     (find this file on the machine where training happened)
+     Outputs: calibration_isotonic.json, gsom_month_medians.json,
+              pair_risk_scores.parquet (with calibrated avg_risk_score)
+
+  3. JOIN OPENMETEO INTO load_features() — reduces weather NaNs from 42% to ~5%
+     In src/model.py, add to load_features() after the DFW join:
+       om = pd.read_parquet(openmeteo_path)
+       om_agg = om.groupby(['iata','month']).mean(numeric_only=True).reset_index()
+       # Join for airport A
+       om_a = om_agg.rename(columns={'iata':'airport_A','month':'Month',
+           'avg_wind_mph':'A_avg_wind_speed','max_gust_mph':'A_max_wind_gust',
+           'total_precip_in':'A_total_precip','precip_days':'A_precip_days',
+           'severe_wx_days':'A_severe_wx_days','extreme_cold_days':'A_extreme_cold_days',
+           'extreme_heat_days':'A_extreme_heat_days'})
+       df = df.merge(om_a[['airport_A','Month',...cols...]], on=['airport_A','Month'],
+                     how='left', suffixes=('','_om'))
+       # Fill GSOM NaNs with openmeteo values
+       for col, om_col in col_mapping.items():
+           df[col] = df[col].fillna(df[om_col])
+
+  4. REBUILD LightGBM on tail-matched data
+     python src/model_lgbm.py
+
+  5. ENSEMBLE XGB + LGBM
+     final_score = 0.55 * xgb_calibrated + 0.45 * lgbm_calibrated
+
+  6. OOD VALIDATION on v8
+     python src/ood_validation.py
+
+  7. MOVE fit_calibration.py INTO REPO
+     cp /tmp/fit_calibration.py src/fit_calibration.py
+     Add call at end of model.py:main()
+
+  8. DEPLOY TO HUGGINGFACE
+     See CLAUDE.md §9 for upload script.
+     Key files: app/app.py, app/predictor.py, xgb_model.json,
+                pair_risk_scores.parquet, calibration_isotonic.json,
+                gsom_month_medians.json, openmeteo_airport_monthly.parquet
+
+--------------------------------------------------------------------------------
+11. RUNNING THE APP LOCALLY
+--------------------------------------------------------------------------------
+
+  conda activate aadata
+  streamlit run app/app.py
+  # Opens at http://localhost:8501
+
+  Tabs: Heatmap | Map | Query | Timeline | Optimizer | Methodology
+
+  App caches feature table at data/processed/app_features_cache.parquet (~24MB).
+  If you update any processed parquet file:
+    rm -f data/processed/app_features_cache.parquet
+
+  Live flights (Optimizer tab): paste AviationStack key in sidebar.
+  Falls back to BTS 2024 analog if no key provided.
+
+--------------------------------------------------------------------------------
+12. EXTERNAL APIS AND TOKENS
+--------------------------------------------------------------------------------
+
+  BTS On-Time:    Free, no key. Scraped by src/download_bts.py
+  NOAA GSOM:      Token: SBRhkMknyZHEHobLChLzPRVSgtXUlmwL (GSOM cache exists)
+  Open-Meteo:     Free, no key. ERA5 reanalysis. src/fetch_openmeteo.py
+  AviationStack:  Free tier 100 req/month. UI key entry in Streamlit sidebar.
+  OpenSky:        Free, no key. Fallback for live flights.
+  HuggingFace:    Ask @itaykadosh for HF token (huggingface.co/settings/tokens)
+
+--------------------------------------------------------------------------------
+13. COMMON GOTCHAS
+--------------------------------------------------------------------------------
+
+  1. Pandas suffix collision in merge: pre-rename flight-specific columns before
+     merging to avoid silent column name mangling.
+
+  2. XGBoost feature name mismatch: adding/removing FEATURE_COLS without retraining
+     causes ValueError at inference. Always retrain after changing FEATURE_COLS.
+
+  3. OOM on predict_proba: score in batches of 50k rows, not all 398k at once.
+
+  4. Season dummy capitalization: pd.get_dummies produces season_Fall (capital).
+     Model trained with lowercase season_fall. Don't change casing without retraining.
+
+  5. app_features_cache.parquet: delete after any processed parquet update.
+     Stale cache causes app to silently use old data.
+
+  6. COVID years 2020–2021: available via --include-covid flag but excluded from
+     training by default (abnormal operations distort the model).
+
+  7. thunder_days: all zeros in openmeteo cache. ERA5 daily doesn't capture
+     sub-daily convection. Skip this feature entirely.
+
+  8. fit_calibration.py: NOT in repo. Lives at /tmp/ on training machine.
+     Must be run after every model retrain.
+
+  9. pair_max_weather_rate: was missing from sequence_features.parquet.
+     Now computed in load_features() in src/model.py. Fixed this session.
+
+  10. conda pip broken on local Mac: use python3 directly, not pip command.
+
+--------------------------------------------------------------------------------
+END OF DOCUMENTATION
+================================================================================
