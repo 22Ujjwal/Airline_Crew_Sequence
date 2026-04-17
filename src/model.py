@@ -180,6 +180,7 @@ def load_features():
     # ── Interaction features ───────────────────────────────────────────────
     # Joint weather risk: two airports simultaneously bad → higher compound risk
     if "A_weather_delay_rate" in df.columns and "B_weather_delay_rate" in df.columns:
+        df["pair_max_weather_rate"] = df[["A_weather_delay_rate", "B_weather_delay_rate"]].max(axis=1)
         df["A_B_weather_coincidence"] = (
             df["A_weather_delay_rate"] * df["B_weather_delay_rate"]
         )
