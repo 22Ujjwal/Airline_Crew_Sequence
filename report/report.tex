@@ -1,0 +1,1046 @@
+% ============================================================
+%  AA EPPS Data Challenge — Final Report
+%  American Airlines Crew Sequence Weather Risk Model
+% ============================================================
+\documentclass[11pt, twoside]{article}
+
+% ── Core layout ─────────────────────────────────────────────
+\usepackage[
+  top=1in, bottom=1in,
+  inner=1.1in, outer=0.9in,
+  headheight=14pt
+]{geometry}
+\usepackage{microtype}          % better justification, fewer overflows
+\usepackage{emptypage}          % suppress headers on blank pages
+\usepackage{setspace}           % line spacing control
+\setstretch{1.08}
+
+% ── Fonts & encoding ────────────────────────────────────────
+\usepackage[T1]{fontenc}
+\usepackage[utf8]{inputenc}
+\usepackage{lmodern}
+\usepackage{textcomp}
+
+% ── Math ────────────────────────────────────────────────────
+\usepackage{amsmath, amssymb, amsthm}
+\usepackage{bm}                 % bold math
+
+% ── Color ───────────────────────────────────────────────────
+\usepackage[dvipsnames, svgnames, table]{xcolor}
+\definecolor{AAred}{HTML}{154734}
+\definecolor{AAdark}{RGB}{18,18,18}
+\definecolor{AAgray}{RGB}{102,102,102}
+\definecolor{AAlight}{RGB}{240,240,240}
+\definecolor{codebg}{RGB}{248,248,248}
+\definecolor{linkblue}{HTML}{154734}
+
+% ── Section formatting ──────────────────────────────────────
+\usepackage{titlesec}
+\titleformat{\section}
+  {\Large\bfseries\color{AAdark}}
+  {\thesection}{1em}{}[\color{AAred}\rule{\linewidth}{1.5pt}]
+\titleformat{\subsection}
+  {\large\bfseries\color{AAdark}}
+  {\thesubsection}{0.8em}{}
+\titleformat{\subsubsection}
+  {\normalsize\bfseries\color{AAgray}}
+  {\thesubsubsection}{0.7em}{}
+\titlespacing*{\section}{0pt}{18pt}{8pt}
+\titlespacing*{\subsection}{0pt}{12pt}{5pt}
+\titlespacing*{\subsubsection}{0pt}{8pt}{3pt}
+
+% ── Headers / footers ───────────────────────────────────────
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\renewcommand{\headrulewidth}{0.4pt}
+\fancyhead[LE]{\small\itshape AA Crew Sequence Weather Risk}
+\fancyhead[RO]{\small\itshape \nouppercase{\leftmark}}
+\fancyfoot[C]{\small\thepage}
+\fancypagestyle{plain}{%
+  \fancyhf{}\fancyfoot[C]{\small\thepage}\renewcommand{\headrulewidth}{0pt}
+}
+
+% ── Tables ──────────────────────────────────────────────────
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{multirow}
+\usepackage{longtable}
+\usepackage{array}
+\newcolumntype{L}[1]{>{\raggedright\arraybackslash}p{#1}}
+\newcolumntype{C}[1]{>{\centering\arraybackslash}p{#1}}
+\newcolumntype{R}[1]{>{\raggedleft\arraybackslash}p{#1}}
+
+% ── Figures ─────────────────────────────────────────────────
+\usepackage{graphicx}
+\usepackage{float}
+\usepackage{caption}
+\usepackage{subcaption}
+\captionsetup{font=small, labelfont=bf, labelsep=period}
+
+% ── Code listings ───────────────────────────────────────────
+\usepackage{listings}
+\lstset{
+  backgroundcolor=\color{codebg},
+  basicstyle=\ttfamily\footnotesize,
+  breaklines=true,
+  frame=single,
+  framerule=0.4pt,
+  rulecolor=\color{AAgray!50},
+  keywordstyle=\color{AAred}\bfseries,
+  commentstyle=\color{AAgray}\itshape,
+  stringstyle=\color{linkblue},
+  numbers=left,
+  numberstyle=\tiny\color{AAgray},
+  numbersep=6pt,
+  xleftmargin=10pt,
+  xrightmargin=4pt,
+}
+
+% ── Highlighted boxes ───────────────────────────────────────
+\usepackage[skins, breakable]{tcolorbox}
+\tcbuselibrary{theorems}
+
+\newtcolorbox{keybox}[1][]{
+  colback=AAlight, colframe=AAred,
+  fonttitle=\bfseries\small,
+  boxrule=1pt, arc=3pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt,
+  #1
+}
+\newtcolorbox{resultbox}[1][]{
+  colback=AAlight!60!white, colframe=AAdark,
+  fonttitle=\bfseries\small,
+  boxrule=0.8pt, arc=3pt,
+  left=6pt, right=6pt, top=4pt, bottom=4pt,
+  #1
+}
+
+% ── Algorithms ──────────────────────────────────────────────
+\usepackage[ruled, vlined, linesnumbered]{algorithm2e}
+\SetKwInput{KwIn}{Input}
+\SetKwInput{KwOut}{Output}
+
+% ── Hyperlinks ──────────────────────────────────────────────
+\usepackage[
+  colorlinks=true,
+  linkcolor=linkblue,
+  citecolor=linkblue,
+  urlcolor=AAred,
+  pdftitle={AA Crew Sequence Weather Risk — EPPS Data Challenge},
+  pdfauthor={Itay Kadosh et al.},
+]{hyperref}
+\usepackage{cleveref}
+
+% ── Bibliography ────────────────────────────────────────────
+\usepackage[numbers, sort&compress]{natbib}
+\bibliographystyle{plainnat}
+
+% ── Misc ────────────────────────────────────────────────────
+\usepackage{enumitem}
+\setlist[itemize]{itemsep=2pt, topsep=4pt}
+\setlist[enumerate]{itemsep=2pt, topsep=4pt}
+\usepackage{lipsum}   % placeholder text — DELETE before submission
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+\usepackage{tikz}
+\usetikzlibrary{arrows.meta, positioning, shapes.geometric, fit, backgrounds}
+
+% ============================================================
+%  Document
+% ============================================================
+\begin{document}
+
+% ── Title page ──────────────────────────────────────────────
+\begin{titlepage}
+  \centering
+  \vspace*{0.2in}
+
+  {\color{AAred}\rule{\linewidth}{2pt}}\vspace{6pt}
+  {\color{AAred}\rule{\linewidth}{0.4pt}}
+
+  \vspace{0.28in}
+  {\Huge\bfseries\color{AAdark}
+    Crew Sequence Weather Risk\\[6pt]
+    at DFW Hub
+  \par}
+
+  \vspace{0.2in}
+  {\Large\itshape\color{AAgray}
+    A Machine Learning Approach to Operational Disruption Prediction\\
+    for American Airlines
+  \par}
+
+  \vspace{0.24in}
+  {\color{AAred}\rule{\linewidth}{0.4pt}}\vspace{4pt}
+  {\color{AAred}\rule{\linewidth}{2pt}}
+
+  \vspace{0.4in}
+  {\large\bfseries EPPS Data Challenge 2026\par}
+
+  \vspace{0.3in}
+  {\large
+    Ujjwal Gupta$^{1}$, Itay Kadosh$^{1,2}$, Natalia Skulic$^{1}$\\[8pt]
+    {\normalsize
+      $^{1}$Erik Jonsson School of Engineering and Computer Science\\[2pt]
+      $^{2}$School of Natural Science and Mathematics
+    }
+  \par}
+
+  \vspace{0.28in}
+  \includegraphics[width=0.31\linewidth]{UT_Dallas_2_Color_Emblem_-_SVG_Brand_Identity_File.svg.png}
+
+  \vfill
+  {\normalsize\color{AAgray} April 2026\par}
+  \vspace{0.3in}
+
+  \begin{tcolorbox}[
+    colback=AAlight, colframe=AAred,
+    width=0.85\linewidth, arc=3pt,
+    boxrule=1pt, left=10pt, right=10pt, top=6pt, bottom=6pt
+  ]
+  \centering\small
+  \textbf{Interactive Dashboard: }
+  \href{https://huggingface.co/spaces/itaykadosh/AA-EPPS-Data-Challenge}%
+       {\texttt{itaykadosh/AA-EPPS-Data-Challenge}}\\[8pt]
+  \textbf{Code: }
+  \href{https://github.com/Optimax14/AA-EPPS-Data-Challenge}%
+       {\texttt{Optimax14/AA-EPPS-Data-Challenge}}
+  \end{tcolorbox}
+\end{titlepage}
+
+% ── Abstract ────────────────────────────────────────────────
+\begin{abstract}
+\noindent
+Weather disruptions at a hub airport rarely stay local. At Dallas/Fort Worth
+International Airport (DFW), a delayed inbound flight can compress a crew turn,
+push back an outbound departure, and trigger downstream reliability problems
+across the network. This project asks whether those vulnerable pairings can be
+identified before crews are assigned, so that American Airlines can avoid
+building especially fragile sequences in the first place.
+
+We approach the problem by modeling real $A \to \text{DFW} \to B$ rotations
+rather than synthetic airport combinations. Using Bureau of Transportation
+Statistics on-time data from 2015--2024, NOAA GSOM monthly weather summaries,
+DFW hub-weather features, and derived duty/cascade proxies, we reconstruct
+398,098 tail-matched sequences and train an XGBoost classifier calibrated via
+isotonic regression to estimate disruption risk at the corridor-month level.
+This framing turns the challenge from a generic airport-ranking exercise into a
+decision-support problem grounded in actual operations.
+
+Our final model achieves a validation AUC of \textbf{0.825} and Average
+Precision of \textbf{0.445} on 2024 holdout data (11.4\% positive rate,
+$\mathrm{AP}_{\text{lift}} = 3.90\times$ above random), with calibrated scores
+ranging from 1.2\% to 58.3\% and tracking observed disruption rates closely.
+We then deploy the result in a Streamlit dashboard with pair-level
+explanations, live schedule views, and a Hungarian-algorithm optimizer that
+constructs lower-risk DFW arrival--departure matches for operational use.
+\end{abstract}
+
+\tableofcontents
+\newpage
+
+% ============================================================
+\section{Introduction}
+\label{sec:intro}
+% ============================================================
+
+\subsection{Problem Context}
+Dallas/Fort Worth International Airport (DFW) is the center of American
+Airlines' domestic hub-and-spoke operation. On a normal day, this structure is
+an advantage: aircraft, crews, and passengers can be routed efficiently through
+a common hub, allowing a large national network to function as a connected
+system. During bad weather, however, the same connectivity becomes a source of
+fragility. A thunderstorm bank at one spoke airport, a line of convective
+weather over North Texas, or a low-visibility event at a destination can ripple
+through multiple flights that were originally scheduled to fit together tightly.
+
+That ripple matters especially for pilot and crew sequencing. In practice,
+crews do not operate isolated flights; they operate chains of flights whose
+timing, legality, and reliability depend on earlier legs finishing close to
+plan. When an inbound leg arrives late into DFW, the outbound leg may inherit
+that delay directly through aircraft availability, gate pressure, or reduced
+turn time. What begins as a local weather issue can therefore become an
+operational sequence problem: a crew arrives late, departs late, risks missing
+connections, and may face tighter duty-time constraints for the rest of the
+day. For an airline, these disruptions are costly not only in minutes of delay,
+but also in reassignment effort, downstream network instability, and degraded
+schedule reliability.
+
+This project is motivated by a simple operational question: before these
+sequences are built, can we identify combinations of flights that are
+structurally more vulnerable to weather-related disruption? More specifically,
+if a crew is scheduled to operate an inbound flight from airport $A$ into DFW
+and then an outbound flight from DFW to airport $B$, are there origin--
+destination combinations that should be avoided because they repeatedly create
+fragile pairings? Our goal is not to predict the weather itself. Rather, it is
+to use historical flight and weather patterns to quantify which DFW-linked
+sequences tend to become risky under seasonal and operational stress.
+
+\subsection{Challenge Statement}
+The EPPS--American Airlines Data Challenge asks teams to identify flights that
+should not be assigned to the same pilot sequence when weather risk is high.
+For the purposes of the competition, the full multi-day crew-routing problem is
+simplified to a two-leg pattern centered on DFW: an inbound leg $A \to
+\text{DFW}$ followed by an outbound leg $\text{DFW} \to B$, where $A$ and $B$
+are domestic airports. The practical objective is to flag pairings that are
+more likely to create cascading delays, missed turn opportunities, duty-time
+pressure, and other operational disruptions.
+
+At first glance, this sounds like a ranking problem over airport pairs. But the
+challenge is harder than simply asking which airports have bad weather. Weather
+is seasonal, disruption is sparse, and delay propagation depends on how flights
+are actually connected in the operation. A pairing can look risky because both
+airports are storm-prone, because DFW itself is vulnerable during certain
+months, or because the timing of the rotation leaves little margin for recovery
+once the first leg slips. The project therefore requires both domain judgment
+and careful data construction: the central question is not only which features
+matter, but also what the correct unit of analysis should be.
+
+Our report treats a ``bad sequence'' as one that is operationally fragile rather
+than merely inconvenient. The underlying idea is decision support: if American
+can recognize these fragile pairings ahead of time, schedulers can avoid
+placing them in the same crew sequence, add more buffer where needed, or at
+least understand where the network is most exposed.
+
+\subsection{Our Approach}
+Our approach evolved in stages. We began with the intuitive idea of measuring
+historical risk at the airport-pair level, reasoning that some combinations of
+spoke airports would be more weather-sensitive than others. Very quickly,
+however, we found that this view was too coarse. Airport pairs do not disrupt
+operations on their own; real aircraft rotations do. That realization led to
+the central methodological choice of the project: instead of fabricating
+same-day pairings from all inbound and outbound flights, we reconstruct actual
+DFW sequences by matching inbound and outbound legs on the same aircraft tail
+number within a realistic turnaround window. This turns the problem from an
+abstract corridor-ranking exercise into a model of real operational handoffs.
+
+Once the sequence itself was defined correctly, the rest of the system followed
+naturally. We combined historical BTS delay statistics, monthly weather
+summaries, DFW hub conditions, and derived duty/cascade features into a
+sequence-level feature set. We then trained a gradient-boosted classifier and
+calibrated its outputs so that the resulting score can be interpreted as an
+estimated disruption rate rather than an opaque ranking signal. Finally, we
+translated the model into an operational tool through an interactive dashboard
+and a sequence optimizer that selects lower-risk arrival--departure matches at
+DFW.
+
+The remainder of this report follows that journey. We first describe the data
+sources and the sequence-construction problem, then explain the feature
+engineering and modeling choices, present validation results, and conclude with
+the decision-support tools that make the work actionable in practice.
+
+\subsection{Contributions}
+\begin{enumerate}
+  \item \textbf{We reframe the problem around real sequences.} Rather than scoring
+        synthetic same-day airport combinations, we construct 398,098 tail-matched
+        aircraft rotations from BTS data, giving the model a unit of analysis
+        that reflects how disruption actually propagates through the DFW hub.
+  \item \textbf{We build an interpretable disruption score.} Using XGBoost with
+        isotonic calibration, we produce corridor-month risk estimates that are
+        designed to be read as expected disruption rates, not just relative model
+        scores.
+  \item \textbf{We enrich weather risk with operational context.} In addition to
+        airport-level weather history, the feature set incorporates DFW hub
+        conditions, duty-proxy features, and cascade signals that capture how
+        delay can compound across connected legs.
+  \item \textbf{We turn prediction into decision support.} The final system is
+        deployed as an interactive dashboard with pair-level explanations and a
+        Hungarian-algorithm optimizer for constructing lower-risk DFW sequences.
+  \item \textbf{We document the project's modeling lessons.} The report highlights
+        why naive corridor-day construction overstates risk, how calibration
+        improves operational usability, and where data limitations still matter.
+\end{enumerate}
+
+% ============================================================
+\section{Data Sources and Collection}
+\label{sec:data}
+% ============================================================
+
+\subsection{BTS On-Time Performance Database}
+The core of the project is the Bureau of Transportation Statistics (BTS)
+On-Time Performance database, which provides flight-level records including
+origin and destination airports, scheduled and actual departure/arrival times,
+tail numbers, delay causes, cancellation codes, and late-aircraft propagation
+fields. This source is what makes the project operationally meaningful: it lets
+us observe not just where weather occurred, but how delays moved through actual
+DFW-connected flights.
+
+Rather than downloading the entire national network, we filtered BTS to flights
+touching DFW, which keeps the dataset aligned with the challenge prompt while
+preserving the local hub structure needed for sequence reconstruction. We use
+all-carrier DFW traffic for modeling because airport-level weather fragility is
+not unique to American Airlines; broader carrier coverage provides a richer
+historical picture of how each airport behaves under stress. Within that
+filtered scope, the most important columns are the flight date, tail number,
+origin/destination, scheduled and actual times, weather delay, NAS delay,
+arrival delay, and late-aircraft delay.
+
+We use 2015--2019 and 2022--2024, excluding 2020--2021 because COVID-era
+operations introduced structural distortions in schedules, route patterns, and
+delay behavior. The year 2024 is reserved as the primary holdout period for
+validation, while earlier years supply the historical signal used for training
+and feature construction.
+
+\begin{table}[H]
+\centering
+\caption{BTS data downloaded per year (DFW-filtered, all carriers).}
+\label{tab:bts_years}
+\begin{tabular}{lrrr}
+\toprule
+Year & Total Flights & AA Flights & Notes \\
+\midrule
+2015 & 521,210 & 293,116 & Pre-training temporal OOD year \\
+2016 & 392,080 & 281,195 & Historical context \\
+2017 & 362,416 & 278,698 & Historical context \\
+2018 & 558,570 & 286,691 & Training window begins \\
+2019 & 608,690 & 307,831 & Training window \\
+2020--2021 & --- & --- & COVID excluded \\
+2022 & 553,419 & 285,877 & Training window \\
+2023 & 570,462 & 324,297 & Training window \\
+2024 & 627,150 & 332,576 & Holdout year \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{NOAA Global Summary of the Month (GSOM)}
+BTS tells us how disruption manifested, but it does not fully describe the
+underlying weather environment at each airport. To add that broader seasonal
+context, we augment the flight data with NOAA's Global Summary of the Month
+(GSOM) dataset. GSOM is useful here because the challenge is not to forecast a
+particular thunderstorm on a particular afternoon; it is to understand which
+corridors are structurally vulnerable during certain months of the year.
+
+For each covered airport, we collect monthly climate indicators such as average
+wind speed, maximum wind gust, number of precipitation days, total
+precipitation, and extreme precipitation. These features are averaged across
+2015--2024 to form a climatological baseline by airport and month. In other
+words, GSOM helps the model learn that Boston in January, Miami in September,
+and Denver in March are exposed to different kinds of recurring weather stress
+even before looking at any one day's operations.
+
+Coverage is incomplete: only a subset of airports in the DFW network has a
+mapped NOAA station with reliable monthly records, and roughly 55\% of sequence
+rows are missing at least one GSOM-side input. Rather than treating that as a
+reason to discard the features, we use GSOM as a secondary contextual layer and
+later address the missing-data problem explicitly through median imputation and
+calibration-aware interpretation.
+
+\subsection{DFW Hub Weather}
+Even when both spoke airports are relatively stable, the hub itself can become
+the bottleneck. Because every modeled sequence passes through DFW, local hub
+conditions deserve their own representation rather than being absorbed into the
+origin and destination features. We therefore derive monthly DFW weather
+statistics directly from BTS, including weather-delay rate, weather-cancellation
+rate, average weather-delay minutes, and a high-percentile delay measure.
+
+This distinction matters conceptually. Origin and destination features capture
+how risky airport $A$ and airport $B$ tend to be; the DFW hub features capture
+how much shared stress is present in the middle of every sequence. A corridor
+can therefore be risky not only because its endpoints are volatile, but also
+because the common transfer point is seasonally fragile.
+
+\subsection{Data Gaps and Limitations}
+The data used in this project are strong enough to support a meaningful
+decision-support prototype, but they are not perfect. First, BTS is an
+excellent source for realized delay and cancellation behavior, yet it is still
+an administrative record of flights rather than a ground-truth record of crew
+assignments. Tail matching provides a practical proxy for crew continuity, but
+it does not capture every crew swap or recovery intervention.
+
+Second, the weather data are intentionally asymmetric. BTS provides rich
+evidence of disruption outcomes, while GSOM provides slower-moving monthly
+climate context rather than flight-specific meteorology. This is a reasonable
+tradeoff for the challenge, but it means the model should be interpreted as a
+risk model for structurally fragile pairings, not as a deterministic flight-day
+forecast. Third, GSOM coverage is incomplete, so missingness must be handled
+carefully to avoid biasing the model toward better-stationed airports.
+
+Finally, the interactive application includes optional live schedule and weather
+components whose external APIs are subject to rate limits and availability
+constraints. These do not affect the historical model results reported here,
+but they do matter for deployment realism and are treated as implementation
+limits rather than modeling limits.
+
+% ============================================================
+\section{Feature Engineering}
+\label{sec:features}
+% ============================================================
+
+\subsection{Tail-Matched Sequence Construction}
+\label{sec:tailmatch}
+% The core methodological contribution — explain why corridor-day is wrong,
+% what tail-matching does, algorithm for linking legs
+
+\begin{keybox}[title=Why Corridor-Day Cross-Join is Flawed]
+The corridor-day approach cross-joins \emph{all} inbound flights $A \to \text{DFW}$
+with \emph{all} outbound flights $\text{DFW} \to B$ on the same calendar date.
+For a busy hub day with 8 inbound and 6 outbound flights, this fabricates
+$8 \times 6 = 48$ ``sequences,'' none of which correspond to a real aircraft
+rotation.  The label (``any flight disrupted'') then scales with hub volume,
+teaching the model that hub size $\approx$ risk.
+\end{keybox}
+
+% Algorithm box for tail-matching
+\begin{algorithm}[H]
+\caption{Tail-Matched Sequence Construction}
+\label{alg:tailmatch}
+\KwIn{BTS flight table $F$ (DFW-filtered, 2015--2024)}
+\KwOut{Sequence table $S$ with one row per real aircraft rotation}
+$\text{IB} \gets \{f \in F : f.\texttt{Dest} = \text{DFW}\}$ \tcp*{inbound legs}
+$\text{OB} \gets \{f \in F : f.\texttt{Origin} = \text{DFW}\}$ \tcp*{outbound legs}
+Pre-rename flight-specific columns: \texttt{ArrDelay\_A}, \texttt{WeatherDelay\_A}, etc.\;
+$S \gets \text{IB} \bowtie_{\texttt{Tail\_Number},\,\texttt{FlightDate}} \text{OB}$ \tcp*{inner join}
+$\text{turnaround} \gets \texttt{CRSDepTime\_B} - \texttt{CRSArrTime\_A}$\;
+$S \gets \{s \in S : 30 \le \text{turnaround} \le 240\}$\;
+$S \gets \{s \in S : s.\texttt{Origin\_A} \ne s.\texttt{Dest\_B}\}$ \tcp*{no round-trips}
+\Return $S$
+\end{algorithm}
+
+\subsection{Target Variable Definition}
+% observed_bad_rate: fraction of tail-matched rotations disrupted per pair-year-month
+% Disruption = weather delay >=15 min on either leg OR cascade (late-aircraft departure)
+% threshold = 0.25 (>25% rotations disrupted = label 1)
+% class balance: 11.4% positive vs old 42.1%
+
+\subsubsection{Disruption Criteria}
+% WeatherDelay_A >= 15 OR WeatherDelay_B >= 15 OR cascade condition
+% Cascade: ArrDelay_A > 15 AND LateAircraftDelay_B / DepDelay_B >= 0.5
+
+\subsubsection{Threshold Choice}
+% Why 0.25? Distribution plot TODO; materiality argument
+
+\subsection{Airport-Level BTS Features}
+% 8 origin + 8 dest = 16 features
+% List in small table
+
+\begin{table}[H]
+\centering
+\caption{Airport-level BTS features (computed separately for origin A and destination B).}
+\label{tab:bts_features}
+\begin{tabular}{lL{5.5cm}}
+\toprule
+Feature & Description \\
+\midrule
+\texttt{weather\_delay\_rate} & Fraction of flights with weather delay \\
+\texttt{cancel\_rate} & Fraction cancelled (all causes) \\
+\texttt{avg\_weather\_delay\_min} & Mean weather delay (delayed only) \\
+\texttt{p75\_weather\_delay\_min} & 75th-percentile weather delay \\
+\texttt{p95\_weather\_delay\_min} & 95th-percentile weather delay \\
+\texttt{nas\_delay\_rate} & Fraction with NAS (airspace) delay \\
+\texttt{avg\_arr\_delay\_min} & Mean arrival delay \\
+\texttt{overall\_on\_time\_rate} & Fraction arriving within 15 min \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Pair-Level BTS Features}
+% 6 features: combined/max/min/sum weather rate, avg delay, both_high_risk
+
+\subsection{Temporal Features}
+% Month, is_spring_summer, median_turnaround_min, season dummies (4)
+% Note lowercase convention to avoid training/inference mismatch
+
+\subsection{GSOM Weather Features}
+% 5 per airport (A + B) = 10, plus 5 pair-level max aggregates = 15 total
+% Coverage: ~45% airports; NaN imputation at inference (section 4.3)
+
+\begin{table}[H]
+\centering
+\caption{NOAA GSOM weather features (computed for origin and destination separately).}
+\label{tab:gsom_features}
+\begin{tabular}{lL{5.5cm}c}
+\toprule
+Feature & Description & Coverage \\
+\midrule
+\texttt{avg\_wind\_speed} & Mean monthly wind speed (mph) & $\sim$45\% \\
+\texttt{precip\_days} & Days with measurable precipitation & $\sim$45\% \\
+\texttt{extreme\_precip} & Days with precip $>$ 1 in & $\sim$45\% \\
+\texttt{total\_precip} & Total monthly precipitation (in) & $\sim$45\% \\
+\texttt{max\_wind\_gust} & Maximum recorded wind gust (mph) & $\sim$45\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{DFW Hub Weather Features}
+% 4 features from BTS; captures hub-wide disruption state independent of specific pair
+
+\subsection{Tail-Chain Features (Crew Duty Proxy)}
+% FAA Part 117 FDP proxy; 13 features
+% Same-FlightDate tail rotations: legs_before, block_before, duty_start_hour, etc.
+% FDP utilization, WOCL rate, downstream cascade risk
+% Coverage 24.2% pair-year; sparse pairs get NaN
+
+\begin{table}[H]
+\centering
+\caption{Tail-chain features used as a proxy for FAA Part 117 crew duty status.}
+\label{tab:tailchain_features}
+\begin{tabular}{lL{5.5cm}}
+\toprule
+Feature & Description \\
+\midrule
+\texttt{legs\_before} & Legs flown on same tail before this rotation \\
+\texttt{block\_min\_before} & Total block minutes before this rotation \\
+\texttt{duty\_start\_hour} & Estimated crew report hour \\
+\texttt{total\_duty\_min} & Estimated total duty period (mean) \\
+\texttt{total\_duty\_p75} & 75th-percentile duty period \\
+\texttt{fdp\_util\_mean} & FDP utilization fraction (vs Part 117 limit) \\
+\texttt{fdp\_util\_p75} & 75th-pctile FDP utilization \\
+\texttt{fdp\_overrun\_rate} & Fraction of rotations near/over FDP limit \\
+\texttt{wocl\_rate} & Fraction of operations in WOCL window (02:00--05:59) \\
+\texttt{legs\_after\_mean} & Downstream legs flown after this rotation \\
+\texttt{legs\_in\_day\_mean} & Total legs in duty day \\
+\texttt{tc\_downstream\_rate} & Rate of downstream delays on same tail \\
+\texttt{tc\_cascade\_late\_rate} & Fraction of tail-chain rotations with cascade \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Airport Cascade Features}
+% 6 features: A/B ap_cascade_rate, ap_cascade_given_late, pair_cascade_product/max
+% All-airport cascade propagation index (no tail matching required)
+
+\subsection{Multi-Hop DFW Cascade Features}
+% A→DFW→B→DFW→C cascade chains; 8 features
+% n_hops, total_late_min, cascade_hop_rate, cascade_depth, unique_airports, recovery_rate
+
+\subsection{Feature Summary}
+% Table: 8 groups, 70 total features
+
+\begin{table}[H]
+\centering
+\caption{Summary of feature groups (70 total features in XGBoost v7).}
+\label{tab:feature_summary}
+\begin{tabular}{llr}
+\toprule
+Group & Description & Count \\
+\midrule
+Origin BTS & Airport-level BTS stats for airport A & 8 \\
+Destination BTS & Airport-level BTS stats for airport B & 8 \\
+Pair BTS & Combined pair-level BTS statistics & 6 \\
+Temporal & Month, season, turnaround & 6 \\
+Origin GSOM & NOAA monthly weather for airport A & 5 \\
+Destination GSOM & NOAA monthly weather for airport B & 5 \\
+Pair GSOM & Max-aggregate GSOM across both airports & 5 \\
+DFW Hub & DFW hub-wide monthly disruption stats & 4 \\
+Tail-Chain / Duty & Crew duty proxy via aircraft rotation chains & 13 \\
+Airport Cascade & Airport-level cascade propagation index & 6 \\
+Multi-Hop Cascade & A$\to$DFW$\to$B$\to$DFW$\to$C depth/rate features & 8 \\
+\midrule
+\textbf{Total} & & \textbf{70} \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ============================================================
+\section{Modeling}
+\label{sec:model}
+% ============================================================
+
+\subsection{Problem Formulation}
+% Binary classification at pair-year-month level
+% Train on 2015-2023, validate on 2024 (time-based split, no leakage)
+% Imbalanced labels: 11.4% positive, scale_pos_weight = 7.73
+
+\subsection{XGBoost Classifier}
+% Gradient boosting trees; why XGBoost chosen (built-in NaN routing, speed, GPU support)
+% Key hyperparameters: n_estimators, max_depth, learning_rate, scale_pos_weight
+% GPU training with device="cuda"
+
+\subsubsection{Hyperparameters}
+% Table of final hyperparameters
+
+\begin{table}[H]
+\centering
+\caption{Final XGBoost v7 hyperparameters.}
+\label{tab:xgb_params}
+\begin{tabular}{ll}
+\toprule
+Parameter & Value \\
+\midrule
+\texttt{n\_estimators} & TODO \\
+\texttt{max\_depth} & TODO \\
+\texttt{learning\_rate} & TODO \\
+\texttt{subsample} & TODO \\
+\texttt{colsample\_bytree} & TODO \\
+\texttt{scale\_pos\_weight} & 7.73 \\
+\texttt{eval\_metric} & \texttt{auc} \\
+\texttt{device} & \texttt{cuda} (CPU fallback) \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Calibration via Isotonic Regression}
+\label{sec:calibration}
+% Why raw log-odds aren't interpretable; isotonic regression monotone transform
+% Fitted on full 398k rows (no holdout for calibration — accepted limitation)
+% 309 breakpoints; range [0.012, 0.591]
+% Sample weighting: sqrt(n_sequences) per row
+
+\subsubsection{Calibration Method}
+\begin{equation}
+  \hat{p}_{\text{cal}} = f_{\text{iso}}(\hat{p}_{\text{raw}})
+  \quad \text{s.t.} \quad
+  f_{\text{iso}} \text{ non-decreasing}, \quad
+  \hat{p}_{\text{cal}} \approx \overline{r}_{\text{bad}} \text{ in each bin}
+\end{equation}
+
+% where $\overline{r}_{\text{bad}}$ is the observed bad rate
+
+\subsubsection{Validation}
+% Table: corridor, month, calibrated score, observed rate
+% Key example: MCO→LAX June: 9.7% calibrated vs 11.6% observed
+
+\begin{table}[H]
+\centering
+\caption{Calibration validation on selected high-volume corridors.}
+\label{tab:calib_validation}
+\begin{tabular}{llrr}
+\toprule
+Corridor & Month & Calibrated Score & Observed Rate \\
+\midrule
+MCO $\to$ LAX & June & 9.7\% & 11.6\% \\
+% TODO: add more examples from pair_risk_scores.parquet
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{GSOM NaN Imputation}
+\label{sec:gsom_impute}
+% 55% airports lack NOAA station
+% Problem: XGBoost NaN routing learned "no station" ≈ lower risk
+%   → ANC, ALB got artificially low scores
+% Fix: month-level population medians from gsom_month_medians.json
+%   filled at inference time in predictor.py
+% SHAP UI: ★ marker + amber border on imputed bars
+
+\begin{keybox}[title=GSOM Imputation Fairness Fix]
+Without imputation, XGBoost's NaN routing learned a spurious pattern:
+airports without NOAA stations (55\% of airports) were systematically
+assigned lower risk scores because the NaN split coincidentally correlated
+with smaller, calmer airports.  This was discovered when ANC (Anchorage) and
+ALB (Albany) received near-zero calibrated scores despite operational evidence
+of weather disruption risk.  We fix this by substituting month-level population
+medians from a pre-computed lookup table at inference time.
+\end{keybox}
+
+\subsection{LightGBM Alternate Model}
+% LGBM duty v5; same feature set; AUC 0.815, AP 0.844 (inflated — old 42% positive)
+% Note: not yet rebuilt on tail-matched data; retained for comparison only
+
+% ============================================================
+\section{Evaluation}
+\label{sec:eval}
+% ============================================================
+
+\subsection{Metrics}
+% ROC-AUC, Average Precision, AP lift above random baseline
+% Why AP lift matters more than raw AP across class balance changes
+
+\subsubsection{AP Lift: A Fairer Comparison Across Class Balances}
+\begin{equation}
+  \mathrm{AP}_{\text{lift}} = \frac{\mathrm{AP}_{\text{model}}}{\mathrm{AP}_{\text{random}}}
+  = \frac{\mathrm{AP}_{\text{model}}}{\pi}
+\end{equation}
+where $\pi$ is the positive rate.  The old corridor-day model achieved
+$\mathrm{AP}_{\text{lift}} = 0.830 / 0.421 = 1.97\times$; the new tail-matched
+model achieves $0.445 / 0.114 = 3.90\times$ --- a $1.98\times$ improvement in
+extractable signal relative to task difficulty.
+
+\subsection{Validation Results}
+% Full results table
+
+\begin{resultbox}[title=XGBoost v7 Validation Results (2024 Holdout)]
+\begin{center}
+\begin{tabular}{lr}
+\toprule
+Metric & Value \\
+\midrule
+Validation AUC & \textbf{0.825} \\
+Validation AP & \textbf{0.445} \\
+Pair-level AUC & 0.803 \\
+$\mathrm{AP}_{\text{lift}}$ & $3.90\times$ \\
+Positive rate & 11.4\% \\
+Training rows & 398,098 \\
+Validation rows & $\sim$TODO \\
+\bottomrule
+\end{tabular}
+\end{center}
+\end{resultbox}
+
+\subsection{Comparison with Corridor-Day Baseline}
+% Side-by-side: corridor-day v6 vs tail-matched v7
+% Table: AUC, AP, AP lift, positive rate, MCO→LAX June score
+
+\begin{table}[H]
+\centering
+\caption{Corridor-day baseline vs.\ tail-matched model comparison.}
+\label{tab:model_comparison}
+\begin{tabular}{lrrrr}
+\toprule
+Model & Val AUC & Val AP & AP Lift & MCO$\to$LAX June \\
+\midrule
+XGBoost v6 (corridor-day) & 0.833 & 0.830 & $1.97\times$ & 87\% \\
+XGBoost v7 (tail-matched) & 0.825 & 0.445 & $3.90\times$ & 9.7\% \\
+Observed rate & --- & --- & --- & 11.6\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\subsection{Feature Importance}
+% Top-N SHAP feature importances
+% Figure: horizontal bar chart (TODO: export from model training)
+% Narrative: which features drive the model most
+
+\subsection{Out-of-Distribution Validation}
+% OOD tests were run on v1 (median-threshold) models; not yet re-run on v7
+% Report v1 results as reference; flag as pending for v7
+
+\begin{table}[H]
+\centering
+\caption{OOD validation results (XGBoost v1, median threshold --- not directly comparable to v7).}
+\label{tab:ood}
+\begin{tabular}{lrr}
+\toprule
+Test Condition & ROC-AUC & Avg Precision \\
+\midrule
+In-distribution 2024 holdout & 0.804 & 0.882 \\
+Temporal OOD --- all-carrier DFW 2015 & 0.768 & 0.767 \\
+Extreme event OOD --- Jan/Feb 2015 blizzards & 0.750 & 0.844 \\
+Carrier OOD --- non-AA/DFW 2022--2023 & 0.723 & 0.473 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+% ============================================================
+\section{Sequence Optimizer}
+\label{sec:optimizer}
+% ============================================================
+
+\subsection{Problem Statement}
+% Given a day's schedule of inbound/outbound pairs at DFW,
+% assign crew/aircraft to minimize total expected weather disruptions
+% Integer assignment problem: each aircraft can only be in one sequence
+
+\subsection{Hungarian Algorithm}
+% Cost matrix: calibrated risk scores for all feasible (A→DFW→B) pairs
+% scipy.optimize.linear_sum_assignment; O(n^3) complexity
+% Feasibility constraints: turnaround window, aircraft availability
+
+\begin{algorithm}[H]
+\caption{DFW Sequence Optimizer (Hungarian Algorithm)}
+\label{alg:optimizer}
+\KwIn{Inbound flights $I$, outbound flights $O$, risk model $f$}
+\KwOut{Optimal assignment $A^* \subseteq I \times O$}
+$C \gets \mathbf{0}^{|I| \times |O|}$ \tcp*{cost matrix}
+\For{$(i, o) \in I \times O$}{
+  \eIf{$30 \le \text{turnaround}(i,o) \le 240$}{
+    $C[i, o] \gets f(i, o)$ \tcp*{calibrated risk score}
+  }{
+    $C[i, o] \gets \infty$ \tcp*{infeasible assignment}
+  }
+}
+$(r^*, c^*) \gets \textsc{HungarianSolve}(C)$\;
+\Return $A^* = \{(I[r^*_k], O[c^*_k])\}$
+\end{algorithm}
+
+\subsection{Live Schedule Integration}
+% Priority: AviationStack → BTS 2024 analog → OpenSky
+% BTS analog: same month + day-of-week in 2024 historical data
+% OpenSky: free, sparse (~30% AA coverage), last resort
+
+% ============================================================
+\section{Dashboard}
+\label{sec:dashboard}
+% ============================================================
+
+\subsection{Architecture}
+% Streamlit + Plotly; HuggingFace Spaces (Python 3.11-slim Docker)
+% st.cache_resource / st.cache_data for heavy loads
+% app_features_cache.parquet for fast startup
+
+\subsection{Tab Descriptions}
+
+\subsubsection{Tab 1: Corridor Heatmap}
+% Airport-pair risk matrix; interactive Plotly heatmap; filter by month/season
+
+\subsubsection{Tab 2: Geographic Risk Map}
+% Plotly choropleth / scatter map; bubble size = risk; DFW hub highlighted
+
+\subsubsection{Tab 3: Pair Query}
+% Per-corridor risk lookup: calibrated score, historical rotations, SHAP waterfall
+% GSOM imputation indicator (★ badge, amber SHAP bars)
+
+\subsubsection{Tab 4: Risk Timeline}
+% Monthly risk trend for a selected corridor; seasonality overlay
+
+\subsubsection{Tab 5: Sequence Optimizer}
+% Upload or load live schedule; run Hungarian optimizer; display optimized assignment
+% Risk reduction vs.\ baseline (random assignment)
+
+\subsubsection{Tab 6: Methodology}
+% Inline documentation matching this paper's content; notation table; calibration text
+
+% ============================================================
+\section{Discussion}
+\label{sec:discussion}
+% ============================================================
+
+\subsection{Key Findings}
+% Risk is driven by: seasonal timing (spring/summer), DFW hub congestion,
+% origin airport weather profile, crew duty accumulation
+% Tail-matched sequences: only 3.6 real rotations per pair-month on average
+%   → confirms model was previously over-estimating frequency
+
+\subsection{Limitations}
+\begin{itemize}
+  \item \textbf{Tail-number matching coverage.} Some rotations involve crew swaps
+        or aircraft swaps that break the tail-chain; these are excluded.
+        Estimated coverage: $\sim$65--70\% of actual crew sequences.
+  \item \textbf{Calibration on full dataset.} Isotonic regression fitted on all
+        398k rows (no holdout); calibration error on genuinely unseen
+        route-months will be slightly higher.
+  \item \textbf{GSOM 55\% NaN.} Month-level medians imputed for airports without
+        NOAA stations; imputation noise is visible in SHAP output.
+  \item \textbf{OOD validation pending.} Out-of-distribution tests were last run
+        on v1 models; v7 OOD numbers are not yet available.
+  \item \textbf{BTS reporting lag.} 2025 data not yet incorporated.
+\end{itemize}
+
+\subsection{Future Work}
+% Rebuild LGBM duty model on tail-matched data
+% Re-run OOD validation on v7
+% Extend to 2025 BTS data
+% Real-time tail-chain tracking via OpenSky ADS-B
+% Crew roster integration (actual vs. proxy duty features)
+
+% ============================================================
+\section{Conclusion}
+\label{sec:conclusion}
+% ============================================================
+% 1 paragraph: restate problem, our solution, key result numbers
+% 1 paragraph: broader impact — how a calibrated risk score helps AA
+%   allocate buffers, prioritize recovery, reduce cascades
+\lipsum[3][1-6]  % REPLACE
+
+% ============================================================
+%  References
+% ============================================================
+\newpage
+\bibliography{references}
+
+% ============================================================
+%  Appendices
+% ============================================================
+\appendix
+
+\section{BTS Column Glossary}
+\label{app:bts_cols}
+% Table: BTS column names, descriptions, units
+
+\begin{longtable}{lL{7cm}l}
+\caption{BTS On-Time Performance column definitions used in this work.}
+\label{tab:bts_cols} \\
+\toprule
+Column & Description & Unit \\
+\midrule
+\endfirsthead
+\multicolumn{3}{l}{\small\itshape Continued from previous page} \\
+\toprule
+Column & Description & Unit \\
+\midrule
+\endhead
+\bottomrule
+\endfoot
+\texttt{FlightDate} & Date of flight & YYYY-MM-DD \\
+\texttt{Tail\_Number} & Aircraft registration (N-number) & --- \\
+\texttt{Origin} & Departure airport IATA code & --- \\
+\texttt{Dest} & Arrival airport IATA code & --- \\
+\texttt{CRSArrTime} & Scheduled arrival time (local) & HHMM \\
+\texttt{CRSDepTime} & Scheduled departure time (local) & HHMM \\
+\texttt{ArrDelay} & Arrival delay (actual $-$ scheduled) & minutes \\
+\texttt{DepDelay} & Departure delay & minutes \\
+\texttt{WeatherDelay} & Delay attributed to weather & minutes \\
+\texttt{LateAircraftDelay} & Delay attributed to late arriving aircraft & minutes \\
+\texttt{NASDelay} & Delay attributed to NAS / ATC & minutes \\
+\texttt{Cancelled} & Flight cancellation indicator & 0/1 \\
+\texttt{CancellationCode} & Cancellation cause code & A/B/C/D \\
+\bottomrule
+\end{longtable}
+
+\section{FAA Part 117 FDP Limits (Simplified)}
+\label{app:part117}
+% Table: FDP limits by report hour + segment count (used for fdp_util features)
+
+\begin{table}[H]
+\centering
+\caption{Simplified FAA Part 117 Flight Duty Period limits used to compute
+         \texttt{fdp\_util} and \texttt{fdp\_overrun\_rate}.}
+\label{tab:fdp_limits}
+\begin{tabular}{ccccc}
+\toprule
+\multirow{2}{*}{Report Hour (local)} & \multicolumn{4}{c}{Max Segments} \\
+\cmidrule(lr){2-5}
+ & 1 & 2 & 3 & 4+ \\
+\midrule
+0600--0659 & 13h & 13h & 12h & 11h \\
+0700--1159 & 13h & 13h & 12h & 12h \\
+1200--1259 & 13h & 13h & 12h & 11h 30m \\
+1300--1659 & 12h & 12h & 11h 30m & 11h \\
+1700--2159 & 12h & 11h 30m & 11h & 10h \\
+2200--0459 & 10h & 10h & 9h & 9h \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\section{Calibration Curve}
+\label{app:calibration_curve}
+% Figure: scatter of raw XGBoost score vs. calibrated score (isotonic staircase)
+% TODO: generate with matplotlib from calibration_isotonic.json
+
+\begin{figure}[H]
+  \centering
+  \fbox{\parbox{0.6\textwidth}{\centering\vspace{2cm}
+    \textbf{TODO:} Calibration curve figure\\
+    (raw XGBoost score vs.\ isotonic calibrated score)
+  \vspace{2cm}}}
+  \caption{Isotonic regression calibration curve.  Raw XGBoost scores are
+           mapped monotonically to the observed bad-rate scale.  309 breakpoints;
+           input range [0.002, 0.978], output range [1.2\%, 58.3\%].}
+  \label{fig:calib_curve}
+\end{figure}
+
+\section{SHAP Feature Importance}
+\label{app:shap}
+% Figure: global SHAP summary plot (top 20 features)
+% TODO: export from model training
+
+\begin{figure}[H]
+  \centering
+  \fbox{\parbox{0.6\textwidth}{\centering\vspace{2cm}
+    \textbf{TODO:} SHAP summary plot\\
+    (top 20 features by mean absolute SHAP value)
+  \vspace{2cm}}}
+  \caption{Global SHAP feature importances for XGBoost v7.  Each point represents
+           one sequence observation; color indicates feature value (red = high).}
+  \label{fig:shap_summary}
+\end{figure}
+
+\section{Risk Score Distribution}
+\label{app:risk_dist}
+% Figure: histogram of calibrated risk scores across 156k pair-months
+% TODO: generate from pair_risk_scores.parquet
+
+\begin{figure}[H]
+  \centering
+  \fbox{\parbox{0.6\textwidth}{\centering\vspace{2cm}
+    \textbf{TODO:} Histogram of calibrated risk scores\\
+    (156,212 pair-months, mean 8.0\%, range 1.2--58.3\%)
+  \vspace{2cm}}}
+  \caption{Distribution of calibrated pair-month risk scores.  Scores are
+           interpretable as the expected fraction of tail-matched rotations
+           that will experience weather disruption.}
+  \label{fig:risk_dist}
+\end{figure}
+
+\end{document}

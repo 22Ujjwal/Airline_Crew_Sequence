@@ -1,0 +1,158 @@
+\relax 
+\providecommand\hyper@newdestlabel[2]{}
+\providecommand\HyField@AuxAddToFields[1]{}
+\providecommand\HyField@AuxAddToCoFields[2]{}
+\bibstyle{plainnat}
+\providecommand \oddpage@label [2]{}
+\@writefile{toc}{\contentsline {section}{\numberline {1}Introduction}{5}{section.1}\protected@file@percent }
+\newlabel{sec:intro}{{1}{5}{Introduction}{section.1}{}}
+\newlabel{sec:intro@cref}{{[section][1][]1}{[1][5][]5}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.1}Problem Context}{5}{subsection.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.2}Challenge Statement}{5}{subsection.1.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.3}Our Approach}{6}{subsection.1.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {1.4}Contributions}{6}{subsection.1.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {2}Data Sources and Collection}{7}{section.2}\protected@file@percent }
+\newlabel{sec:data}{{2}{7}{Data Sources and Collection}{section.2}{}}
+\newlabel{sec:data@cref}{{[section][2][]2}{[1][7][]7}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.1}BTS On-Time Performance Database}{7}{subsection.2.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {1}{\ignorespaces BTS data downloaded per year (DFW-filtered, all carriers).}}{7}{table.caption.1}\protected@file@percent }
+\providecommand*\caption@xref[2]{\@setref\relax\@undefined{#1}}
+\newlabel{tab:bts_years}{{1}{7}{BTS data downloaded per year (DFW-filtered, all carriers)}{table.caption.1}{}}
+\newlabel{tab:bts_years@cref}{{[table][1][]1}{[1][7][]7}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.2}NOAA Global Summary of the Month (GSOM)}{7}{subsection.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.3}DFW Hub Weather}{8}{subsection.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {2.4}Data Gaps and Limitations}{8}{subsection.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {3}Feature Engineering}{8}{section.3}\protected@file@percent }
+\newlabel{sec:features}{{3}{8}{Feature Engineering}{section.3}{}}
+\newlabel{sec:features@cref}{{[section][3][]3}{[1][8][]8}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.1}Tail-Matched Sequence Construction}{9}{subsection.3.1}\protected@file@percent }
+\newlabel{sec:tailmatch}{{3.1}{9}{Tail-Matched Sequence Construction}{subsection.3.1}{}}
+\newlabel{sec:tailmatch@cref}{{[subsection][1][3]3.1}{[1][8][]9}}
+\@writefile{loa}{\contentsline {algocf}{\numberline {1}{\ignorespaces Tail-Matched Sequence Construction}}{9}{algocf.1}\protected@file@percent }
+\newlabel{alg:tailmatch}{{1}{9}{Tail-Matched Sequence Construction}{algocf.1}{}}
+\newlabel{alg:tailmatch@cref}{{[algorithm][1][]1}{[1][9][]9}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.2}Target Variable Definition}{9}{subsection.3.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.1}Disruption Criteria}{9}{subsubsection.3.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {3.2.2}Threshold Choice}{9}{subsubsection.3.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.3}Airport-Level BTS Features}{9}{subsection.3.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {2}{\ignorespaces Airport-level BTS features (computed separately for origin A and destination B).}}{9}{table.caption.2}\protected@file@percent }
+\newlabel{tab:bts_features}{{2}{9}{Airport-level BTS features (computed separately for origin A and destination B)}{table.caption.2}{}}
+\newlabel{tab:bts_features@cref}{{[table][2][]2}{[1][9][]9}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.4}Pair-Level BTS Features}{9}{subsection.3.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.5}Temporal Features}{10}{subsection.3.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.6}GSOM Weather Features}{10}{subsection.3.6}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {3}{\ignorespaces NOAA GSOM weather features (computed for origin and destination separately).}}{10}{table.caption.3}\protected@file@percent }
+\newlabel{tab:gsom_features}{{3}{10}{NOAA GSOM weather features (computed for origin and destination separately)}{table.caption.3}{}}
+\newlabel{tab:gsom_features@cref}{{[table][3][]3}{[1][10][]10}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.7}DFW Hub Weather Features}{10}{subsection.3.7}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.8}Tail-Chain Features (Crew Duty Proxy)}{10}{subsection.3.8}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {4}{\ignorespaces Tail-chain features used as a proxy for FAA Part 117 crew duty status.}}{10}{table.caption.4}\protected@file@percent }
+\newlabel{tab:tailchain_features}{{4}{10}{Tail-chain features used as a proxy for FAA Part 117 crew duty status}{table.caption.4}{}}
+\newlabel{tab:tailchain_features@cref}{{[table][4][]4}{[1][10][]10}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.9}Airport Cascade Features}{11}{subsection.3.9}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.10}Multi-Hop DFW Cascade Features}{11}{subsection.3.10}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {3.11}Feature Summary}{11}{subsection.3.11}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {5}{\ignorespaces Summary of feature groups (70 total features in XGBoost v7).}}{11}{table.caption.5}\protected@file@percent }
+\newlabel{tab:feature_summary}{{5}{11}{Summary of feature groups (70 total features in XGBoost v7)}{table.caption.5}{}}
+\newlabel{tab:feature_summary@cref}{{[table][5][]5}{[1][11][]11}}
+\@writefile{toc}{\contentsline {section}{\numberline {4}Modeling}{11}{section.4}\protected@file@percent }
+\newlabel{sec:model}{{4}{11}{Modeling}{section.4}{}}
+\newlabel{sec:model@cref}{{[section][4][]4}{[1][11][]11}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.1}Problem Formulation}{11}{subsection.4.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.2}XGBoost Classifier}{11}{subsection.4.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.2.1}Hyperparameters}{11}{subsubsection.4.2.1}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {6}{\ignorespaces Final XGBoost v7 hyperparameters.}}{11}{table.caption.6}\protected@file@percent }
+\newlabel{tab:xgb_params}{{6}{11}{Final XGBoost v7 hyperparameters}{table.caption.6}{}}
+\newlabel{tab:xgb_params@cref}{{[table][6][]6}{[1][11][]11}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.3}Calibration via Isotonic Regression}{11}{subsection.4.3}\protected@file@percent }
+\newlabel{sec:calibration}{{4.3}{11}{Calibration via Isotonic Regression}{subsection.4.3}{}}
+\newlabel{sec:calibration@cref}{{[subsection][3][4]4.3}{[1][11][]11}}
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.3.1}Calibration Method}{12}{subsubsection.4.3.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {4.3.2}Validation}{12}{subsubsection.4.3.2}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {7}{\ignorespaces Calibration validation on selected high-volume corridors.}}{12}{table.caption.7}\protected@file@percent }
+\newlabel{tab:calib_validation}{{7}{12}{Calibration validation on selected high-volume corridors}{table.caption.7}{}}
+\newlabel{tab:calib_validation@cref}{{[table][7][]7}{[1][12][]12}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.4}GSOM NaN Imputation}{12}{subsection.4.4}\protected@file@percent }
+\newlabel{sec:gsom_impute}{{4.4}{12}{GSOM NaN Imputation}{subsection.4.4}{}}
+\newlabel{sec:gsom_impute@cref}{{[subsection][4][4]4.4}{[1][12][]12}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {4.5}LightGBM Alternate Model}{12}{subsection.4.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {5}Evaluation}{12}{section.5}\protected@file@percent }
+\newlabel{sec:eval}{{5}{12}{Evaluation}{section.5}{}}
+\newlabel{sec:eval@cref}{{[section][5][]5}{[1][12][]12}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.1}Metrics}{12}{subsection.5.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {5.1.1}AP Lift: A Fairer Comparison Across Class Balances}{12}{subsubsection.5.1.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.2}Validation Results}{13}{subsection.5.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.3}Comparison with Corridor-Day Baseline}{13}{subsection.5.3}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {8}{\ignorespaces Corridor-day baseline vs.\ tail-matched model comparison.}}{13}{table.caption.8}\protected@file@percent }
+\newlabel{tab:model_comparison}{{8}{13}{Corridor-day baseline vs.\ tail-matched model comparison}{table.caption.8}{}}
+\newlabel{tab:model_comparison@cref}{{[table][8][]8}{[1][13][]13}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.4}Feature Importance}{13}{subsection.5.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {5.5}Out-of-Distribution Validation}{13}{subsection.5.5}\protected@file@percent }
+\@writefile{lot}{\contentsline {table}{\numberline {9}{\ignorespaces OOD validation results (XGBoost v1, median threshold --- not directly comparable to v7).}}{13}{table.caption.9}\protected@file@percent }
+\newlabel{tab:ood}{{9}{13}{OOD validation results (XGBoost v1, median threshold --- not directly comparable to v7)}{table.caption.9}{}}
+\newlabel{tab:ood@cref}{{[table][9][]9}{[1][13][]13}}
+\@writefile{toc}{\contentsline {section}{\numberline {6}Sequence Optimizer}{13}{section.6}\protected@file@percent }
+\newlabel{sec:optimizer}{{6}{13}{Sequence Optimizer}{section.6}{}}
+\newlabel{sec:optimizer@cref}{{[section][6][]6}{[1][13][]13}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.1}Problem Statement}{13}{subsection.6.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.2}Hungarian Algorithm}{14}{subsection.6.2}\protected@file@percent }
+\@writefile{loa}{\contentsline {algocf}{\numberline {2}{\ignorespaces DFW Sequence Optimizer (Hungarian Algorithm)}}{14}{algocf.2}\protected@file@percent }
+\newlabel{alg:optimizer}{{2}{14}{Hungarian Algorithm}{algocf.2}{}}
+\newlabel{alg:optimizer@cref}{{[algorithm][2][]2}{[1][13][]14}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {6.3}Live Schedule Integration}{14}{subsection.6.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {7}Dashboard}{14}{section.7}\protected@file@percent }
+\newlabel{sec:dashboard}{{7}{14}{Dashboard}{section.7}{}}
+\newlabel{sec:dashboard@cref}{{[section][7][]7}{[1][14][]14}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.1}Architecture}{14}{subsection.7.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {7.2}Tab Descriptions}{14}{subsection.7.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {7.2.1}Tab 1: Corridor Heatmap}{14}{subsubsection.7.2.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {7.2.2}Tab 2: Geographic Risk Map}{14}{subsubsection.7.2.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {7.2.3}Tab 3: Pair Query}{14}{subsubsection.7.2.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {7.2.4}Tab 4: Risk Timeline}{14}{subsubsection.7.2.4}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {7.2.5}Tab 5: Sequence Optimizer}{14}{subsubsection.7.2.5}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsubsection}{\numberline {7.2.6}Tab 6: Methodology}{14}{subsubsection.7.2.6}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {8}Discussion}{14}{section.8}\protected@file@percent }
+\newlabel{sec:discussion}{{8}{14}{Discussion}{section.8}{}}
+\newlabel{sec:discussion@cref}{{[section][8][]8}{[1][14][]14}}
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.1}Key Findings}{14}{subsection.8.1}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.2}Limitations}{14}{subsection.8.2}\protected@file@percent }
+\@writefile{toc}{\contentsline {subsection}{\numberline {8.3}Future Work}{15}{subsection.8.3}\protected@file@percent }
+\@writefile{toc}{\contentsline {section}{\numberline {9}Conclusion}{15}{section.9}\protected@file@percent }
+\newlabel{sec:conclusion}{{9}{15}{Conclusion}{section.9}{}}
+\newlabel{sec:conclusion@cref}{{[section][9][]9}{[1][15][]15}}
+\bibdata{references}
+\gdef \LT@i {\LT@entry 
+    {4}{109.72847pt}\LT@entry 
+    {1}{211.16928pt}\LT@entry 
+    {4}{88.95508pt}}
+\@writefile{toc}{\contentsline {section}{\numberline {A}BTS Column Glossary}{16}{appendix.A}\protected@file@percent }
+\newlabel{app:bts_cols}{{A}{16}{BTS Column Glossary}{appendix.A}{}}
+\newlabel{app:bts_cols@cref}{{[appendix][1][2147483647]A}{[1][16][]16}}
+\@writefile{lot}{\contentsline {table}{\numberline {10}{\ignorespaces BTS On-Time Performance column definitions used in this work.}}{16}{table.10}\protected@file@percent }
+\newlabel{tab:bts_cols}{{10}{16}{BTS On-Time Performance column definitions used in this work}{table.10}{}}
+\newlabel{tab:bts_cols@cref}{{[table][10][2147483647]10}{[1][16][]16}}
+\@writefile{toc}{\contentsline {section}{\numberline {B}FAA Part 117 FDP Limits (Simplified)}{16}{appendix.B}\protected@file@percent }
+\newlabel{app:part117}{{B}{16}{FAA Part 117 FDP Limits (Simplified)}{appendix.B}{}}
+\newlabel{app:part117@cref}{{[appendix][2][2147483647]B}{[1][16][]16}}
+\@writefile{lot}{\contentsline {table}{\numberline {11}{\ignorespaces Simplified FAA Part 117 Flight Duty Period limits used to compute \texttt  {fdp\_util} and \texttt  {fdp\_overrun\_rate}.}}{16}{table.caption.10}\protected@file@percent }
+\newlabel{tab:fdp_limits}{{11}{16}{Simplified FAA Part 117 Flight Duty Period limits used to compute \texttt {fdp\_util} and \texttt {fdp\_overrun\_rate}}{table.caption.10}{}}
+\newlabel{tab:fdp_limits@cref}{{[table][11][2147483647]11}{[1][16][]16}}
+\@writefile{toc}{\contentsline {section}{\numberline {C}Calibration Curve}{17}{appendix.C}\protected@file@percent }
+\newlabel{app:calibration_curve}{{C}{17}{Calibration Curve}{appendix.C}{}}
+\newlabel{app:calibration_curve@cref}{{[appendix][3][2147483647]C}{[1][16][]17}}
+\@writefile{lof}{\contentsline {figure}{\numberline {1}{\ignorespaces Isotonic regression calibration curve. Raw XGBoost scores are mapped monotonically to the observed bad-rate scale. 309 breakpoints; input range [0.002, 0.978], output range [1.2\%, 58.3\%].}}{17}{figure.caption.11}\protected@file@percent }
+\newlabel{fig:calib_curve}{{1}{17}{Isotonic regression calibration curve. Raw XGBoost scores are mapped monotonically to the observed bad-rate scale. 309 breakpoints; input range [0.002, 0.978], output range [1.2\%, 58.3\%]}{figure.caption.11}{}}
+\newlabel{fig:calib_curve@cref}{{[figure][1][2147483647]1}{[1][16][]17}}
+\@writefile{toc}{\contentsline {section}{\numberline {D}SHAP Feature Importance}{17}{appendix.D}\protected@file@percent }
+\newlabel{app:shap}{{D}{17}{SHAP Feature Importance}{appendix.D}{}}
+\newlabel{app:shap@cref}{{[appendix][4][2147483647]D}{[1][17][]17}}
+\@writefile{lof}{\contentsline {figure}{\numberline {2}{\ignorespaces Global SHAP feature importances for XGBoost v7. Each point represents one sequence observation; color indicates feature value (red = high).}}{17}{figure.caption.12}\protected@file@percent }
+\newlabel{fig:shap_summary}{{2}{17}{Global SHAP feature importances for XGBoost v7. Each point represents one sequence observation; color indicates feature value (red = high)}{figure.caption.12}{}}
+\newlabel{fig:shap_summary@cref}{{[figure][2][2147483647]2}{[1][17][]17}}
+\@writefile{toc}{\contentsline {section}{\numberline {E}Risk Score Distribution}{18}{appendix.E}\protected@file@percent }
+\newlabel{app:risk_dist}{{E}{18}{Risk Score Distribution}{appendix.E}{}}
+\newlabel{app:risk_dist@cref}{{[appendix][5][2147483647]E}{[1][17][]18}}
+\@writefile{lof}{\contentsline {figure}{\numberline {3}{\ignorespaces Distribution of calibrated pair-month risk scores. Scores are interpretable as the expected fraction of tail-matched rotations that will experience weather disruption.}}{18}{figure.caption.13}\protected@file@percent }
+\newlabel{fig:risk_dist}{{3}{18}{Distribution of calibrated pair-month risk scores. Scores are interpretable as the expected fraction of tail-matched rotations that will experience weather disruption}{figure.caption.13}{}}
+\newlabel{fig:risk_dist@cref}{{[figure][3][2147483647]3}{[1][17][]18}}
+\gdef \@abspage@last{18}

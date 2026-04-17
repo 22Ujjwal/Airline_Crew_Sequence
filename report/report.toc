@@ -1,0 +1,63 @@
+\contentsline {section}{\numberline {1}Introduction}{5}{section.1}%
+\contentsline {subsection}{\numberline {1.1}Problem Context}{5}{subsection.1.1}%
+\contentsline {subsection}{\numberline {1.2}Challenge Statement}{5}{subsection.1.2}%
+\contentsline {subsection}{\numberline {1.3}Our Approach}{6}{subsection.1.3}%
+\contentsline {subsection}{\numberline {1.4}Contributions}{6}{subsection.1.4}%
+\contentsline {section}{\numberline {2}Data Sources and Collection}{7}{section.2}%
+\contentsline {subsection}{\numberline {2.1}BTS On-Time Performance Database}{7}{subsection.2.1}%
+\contentsline {subsection}{\numberline {2.2}NOAA Global Summary of the Month (GSOM)}{7}{subsection.2.2}%
+\contentsline {subsection}{\numberline {2.3}DFW Hub Weather}{8}{subsection.2.3}%
+\contentsline {subsection}{\numberline {2.4}Data Gaps and Limitations}{8}{subsection.2.4}%
+\contentsline {section}{\numberline {3}Feature Engineering}{8}{section.3}%
+\contentsline {subsection}{\numberline {3.1}Tail-Matched Sequence Construction}{9}{subsection.3.1}%
+\contentsline {subsection}{\numberline {3.2}Target Variable Definition}{9}{subsection.3.2}%
+\contentsline {subsubsection}{\numberline {3.2.1}Disruption Criteria}{9}{subsubsection.3.2.1}%
+\contentsline {subsubsection}{\numberline {3.2.2}Threshold Choice}{9}{subsubsection.3.2.2}%
+\contentsline {subsection}{\numberline {3.3}Airport-Level BTS Features}{9}{subsection.3.3}%
+\contentsline {subsection}{\numberline {3.4}Pair-Level BTS Features}{9}{subsection.3.4}%
+\contentsline {subsection}{\numberline {3.5}Temporal Features}{10}{subsection.3.5}%
+\contentsline {subsection}{\numberline {3.6}GSOM Weather Features}{10}{subsection.3.6}%
+\contentsline {subsection}{\numberline {3.7}DFW Hub Weather Features}{10}{subsection.3.7}%
+\contentsline {subsection}{\numberline {3.8}Tail-Chain Features (Crew Duty Proxy)}{10}{subsection.3.8}%
+\contentsline {subsection}{\numberline {3.9}Airport Cascade Features}{11}{subsection.3.9}%
+\contentsline {subsection}{\numberline {3.10}Multi-Hop DFW Cascade Features}{11}{subsection.3.10}%
+\contentsline {subsection}{\numberline {3.11}Feature Summary}{11}{subsection.3.11}%
+\contentsline {section}{\numberline {4}Modeling}{11}{section.4}%
+\contentsline {subsection}{\numberline {4.1}Problem Formulation}{11}{subsection.4.1}%
+\contentsline {subsection}{\numberline {4.2}XGBoost Classifier}{11}{subsection.4.2}%
+\contentsline {subsubsection}{\numberline {4.2.1}Hyperparameters}{11}{subsubsection.4.2.1}%
+\contentsline {subsection}{\numberline {4.3}Calibration via Isotonic Regression}{11}{subsection.4.3}%
+\contentsline {subsubsection}{\numberline {4.3.1}Calibration Method}{12}{subsubsection.4.3.1}%
+\contentsline {subsubsection}{\numberline {4.3.2}Validation}{12}{subsubsection.4.3.2}%
+\contentsline {subsection}{\numberline {4.4}GSOM NaN Imputation}{12}{subsection.4.4}%
+\contentsline {subsection}{\numberline {4.5}LightGBM Alternate Model}{12}{subsection.4.5}%
+\contentsline {section}{\numberline {5}Evaluation}{12}{section.5}%
+\contentsline {subsection}{\numberline {5.1}Metrics}{12}{subsection.5.1}%
+\contentsline {subsubsection}{\numberline {5.1.1}AP Lift: A Fairer Comparison Across Class Balances}{12}{subsubsection.5.1.1}%
+\contentsline {subsection}{\numberline {5.2}Validation Results}{13}{subsection.5.2}%
+\contentsline {subsection}{\numberline {5.3}Comparison with Corridor-Day Baseline}{13}{subsection.5.3}%
+\contentsline {subsection}{\numberline {5.4}Feature Importance}{13}{subsection.5.4}%
+\contentsline {subsection}{\numberline {5.5}Out-of-Distribution Validation}{13}{subsection.5.5}%
+\contentsline {section}{\numberline {6}Sequence Optimizer}{13}{section.6}%
+\contentsline {subsection}{\numberline {6.1}Problem Statement}{13}{subsection.6.1}%
+\contentsline {subsection}{\numberline {6.2}Hungarian Algorithm}{14}{subsection.6.2}%
+\contentsline {subsection}{\numberline {6.3}Live Schedule Integration}{14}{subsection.6.3}%
+\contentsline {section}{\numberline {7}Dashboard}{14}{section.7}%
+\contentsline {subsection}{\numberline {7.1}Architecture}{14}{subsection.7.1}%
+\contentsline {subsection}{\numberline {7.2}Tab Descriptions}{14}{subsection.7.2}%
+\contentsline {subsubsection}{\numberline {7.2.1}Tab 1: Corridor Heatmap}{14}{subsubsection.7.2.1}%
+\contentsline {subsubsection}{\numberline {7.2.2}Tab 2: Geographic Risk Map}{14}{subsubsection.7.2.2}%
+\contentsline {subsubsection}{\numberline {7.2.3}Tab 3: Pair Query}{14}{subsubsection.7.2.3}%
+\contentsline {subsubsection}{\numberline {7.2.4}Tab 4: Risk Timeline}{14}{subsubsection.7.2.4}%
+\contentsline {subsubsection}{\numberline {7.2.5}Tab 5: Sequence Optimizer}{14}{subsubsection.7.2.5}%
+\contentsline {subsubsection}{\numberline {7.2.6}Tab 6: Methodology}{14}{subsubsection.7.2.6}%
+\contentsline {section}{\numberline {8}Discussion}{14}{section.8}%
+\contentsline {subsection}{\numberline {8.1}Key Findings}{14}{subsection.8.1}%
+\contentsline {subsection}{\numberline {8.2}Limitations}{14}{subsection.8.2}%
+\contentsline {subsection}{\numberline {8.3}Future Work}{15}{subsection.8.3}%
+\contentsline {section}{\numberline {9}Conclusion}{15}{section.9}%
+\contentsline {section}{\numberline {A}BTS Column Glossary}{16}{appendix.A}%
+\contentsline {section}{\numberline {B}FAA Part 117 FDP Limits (Simplified)}{16}{appendix.B}%
+\contentsline {section}{\numberline {C}Calibration Curve}{17}{appendix.C}%
+\contentsline {section}{\numberline {D}SHAP Feature Importance}{17}{appendix.D}%
+\contentsline {section}{\numberline {E}Risk Score Distribution}{18}{appendix.E}%
