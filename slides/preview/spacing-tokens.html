@@ -1,0 +1,39 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #fff; padding: 24px; font-family: 'Inter', sans-serif; }
+.grid { display: grid; grid-template-columns: repeat(7, 1fr); gap: 8px; align-items: flex-end; margin-bottom: 16px; }
+.token { display: flex; flex-direction: column; align-items: center; gap: 6px; }
+.bar { background: #000; border-radius: 1px; width: 100%; }
+.token-lbl { font-size: 9px; color: #6F6F6F; text-align: center; }
+.token-val { font-size: 8px; color: #A8A8A8; text-align: center; }
+.named { display: flex; flex-direction: column; gap: 6px; }
+.named-row { display: flex; align-items: center; gap: 10px; }
+.named-bar { background: #000; border-radius: 1px; height: 8px; }
+.named-label { font-size: 10px; color: #6F6F6F; min-width: 100px; }
+.named-val { font-size: 10px; color: #A8A8A8; }
+</style>
+</head>
+<body>
+  <div class="grid">
+    <div class="token"><div class="bar" style="height:4px;"></div><div class="token-lbl">--space-1</div><div class="token-val">4px</div></div>
+    <div class="token"><div class="bar" style="height:8px;"></div><div class="token-lbl">--space-2</div><div class="token-val">8px</div></div>
+    <div class="token"><div class="bar" style="height:12px;"></div><div class="token-lbl">--space-3</div><div class="token-val">12px</div></div>
+    <div class="token"><div class="bar" style="height:16px;"></div><div class="token-lbl">--space-4</div><div class="token-val">16px</div></div>
+    <div class="token"><div class="bar" style="height:24px;"></div><div class="token-lbl">--space-5</div><div class="token-val">24px</div></div>
+    <div class="token"><div class="bar" style="height:32px;"></div><div class="token-lbl">--space-6</div><div class="token-val">32px</div></div>
+    <div class="token"><div class="bar" style="height:48px;"></div><div class="token-lbl">--space-7</div><div class="token-val">48px</div></div>
+  </div>
+  <div class="named">
+    <div class="named-row"><div class="named-bar" style="width:64px;"></div><div class="named-label">--space-8</div><div class="named-val">64px</div></div>
+    <div class="named-row"><div class="named-bar" style="width:80px;"></div><div class="named-label">--space-9 / --gutter</div><div class="named-val">80px</div></div>
+    <div class="named-row"><div class="named-bar" style="width:96px;"></div><div class="named-label">--space-10</div><div class="named-val">96px</div></div>
+    <div class="named-row"><div class="named-bar" style="width:128px;"></div><div class="named-label">--space-11</div><div class="named-val">128px</div></div>
+    <div class="named-row"><div class="named-bar" style="width:160px;"></div><div class="named-label">--space-12 / --section-gap</div><div class="named-val">160px</div></div>
+  </div>
+</body>
+</html>

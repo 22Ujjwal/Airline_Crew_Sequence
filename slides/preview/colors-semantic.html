@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', sans-serif; background: #F7F7F5; padding: 24px; }
+.grid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.token { background: white; border: 1px solid rgba(0,0,0,0.06); border-radius: 2px; padding: 10px 12px; display: flex; align-items: center; gap: 10px; }
+.dot { width: 28px; height: 28px; border-radius: 50%; flex-shrink: 0; }
+.token-name { font-size: 10px; font-weight: 500; color: #000; letter-spacing: 0.03em; }
+.token-val  { font-size: 9px; color: #6F6F6F; margin-top: 1px; }
+</style>
+</head>
+<body>
+<div class="grid">
+  <div class="token"><div class="dot" style="background:#000;"></div><div><div class="token-name">--fg-primary</div><div class="token-val">Absolute Black · intent, structure</div></div></div>
+  <div class="token"><div class="dot" style="background:#6F6F6F;"></div><div><div class="token-name">--fg-secondary</div><div class="token-val">Soft Ash · thought, distance</div></div></div>
+  <div class="token"><div class="dot" style="background:#A8A8A8;"></div><div><div class="token-name">--fg-tertiary</div><div class="token-val">Ash Light · quiet annotation</div></div></div>
+  <div class="token"><div class="dot" style="background:#fff; border:1px solid #eee;"></div><div><div class="token-name">--fg-inverse</div><div class="token-val">White · on dark backgrounds</div></div></div>
+  <div class="token"><div class="dot" style="background:#fff; border:1px solid #eee;"></div><div><div class="token-name">--bg-base</div><div class="token-val">White · primary surface</div></div></div>
+  <div class="token"><div class="dot" style="background:#0D0D0D;"></div><div><div class="token-name">--bg-dark</div><div class="token-val">Near Black · cinematic mode</div></div></div>
+</div>
+</body>
+</html>

@@ -1,0 +1,63 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { font-family: 'Inter', sans-serif; background: #F7F7F5; padding: 24px; }
+.row { display: flex; gap: 12px; }
+.swatch { flex: 1; border-radius: 2px; overflow: hidden; }
+.swatch-color { height: 80px; }
+.swatch-meta { padding: 10px 12px; background: white; border: 1px solid rgba(0,0,0,0.06); border-top: none; }
+.swatch-name { font-size: 11px; font-weight: 500; color: #000; letter-spacing: 0.02em; margin-bottom: 2px; }
+.swatch-hex { font-size: 10px; color: #6F6F6F; font-variant-numeric: tabular-nums; }
+</style>
+</head>
+<body>
+<div class="row">
+  <div class="swatch">
+    <div class="swatch-color" style="background:#000000; border: 1px solid rgba(0,0,0,0.08);"></div>
+    <div class="swatch-meta">
+      <div class="swatch-name">Absolute Black</div>
+      <div class="swatch-hex">#000000</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background:#6F6F6F;"></div>
+    <div class="swatch-meta">
+      <div class="swatch-name">Soft Ash</div>
+      <div class="swatch-hex">#6F6F6F</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background:#A8A8A8;"></div>
+    <div class="swatch-meta">
+      <div class="swatch-name">Ash Light</div>
+      <div class="swatch-hex">#A8A8A8</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background:#3A3A3A;"></div>
+    <div class="swatch-meta">
+      <div class="swatch-name">Ash Dark</div>
+      <div class="swatch-hex">#3A3A3A</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background:#F7F7F5; border: 1px solid rgba(0,0,0,0.08);"></div>
+    <div class="swatch-meta">
+      <div class="swatch-name">Off White</div>
+      <div class="swatch-hex">#F7F7F5</div>
+    </div>
+  </div>
+  <div class="swatch">
+    <div class="swatch-color" style="background:#FFFFFF; border: 1px solid rgba(0,0,0,0.08);"></div>
+    <div class="swatch-meta">
+      <div class="swatch-name">Absolute White</div>
+      <div class="swatch-hex">#FFFFFF</div>
+    </div>
+  </div>
+</div>
+</body>
+</html>

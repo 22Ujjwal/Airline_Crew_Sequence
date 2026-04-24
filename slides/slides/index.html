@@ -1,0 +1,176 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+* { margin:0; padding:0; box-sizing:border-box; }
+html, body { width:100%; height:100%; background:#000; }
+
+/* ── Stage ── */
+.stage {
+  width: 1280px;
+  height: 720px;
+  position: relative;
+  transform-origin: top left;
+  overflow: hidden;
+}
+
+/* ── Slide base ── */
+.slide {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  transition: opacity 0.7s cubic-bezier(0.16,1,0.3,1);
+  pointer-events: none;
+}
+.slide.active {
+  opacity: 1;
+  pointer-events: auto;
+}
+
+/* ── Grain overlay ── */
+.grain {
+  position: absolute;
+  inset: 0;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 200 200' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.85' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.028;
+  pointer-events: none;
+  z-index: 50;
+}
+
+/* ── Type ── */
+.serif { font-family: 'Instrument Serif', Georgia, serif; }
+.sans  { font-family: 'Inter', sans-serif; }
+
+/* ── Nav ── */
+.nav {
+  position: fixed;
+  bottom: 32px;
+  left: 50%;
+  transform: translateX(-50%);
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  z-index: 200;
+}
+.nav-btn {
+  background: none;
+  border: 1px solid rgba(255,255,255,0.25);
+  color: rgba(255,255,255,0.6);
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  padding: 8px 20px;
+  cursor: pointer;
+  transition: opacity 0.4s;
+}
+.nav-btn:hover { opacity: 0.6; }
+.nav-counter {
+  font-family: 'Inter', sans-serif;
+  font-size: 11px;
+  letter-spacing: 0.1em;
+  color: rgba(255,255,255,0.3);
+}
+</style>
+</head>
+<body>
+
+<div id="stage" class="stage">
+  <div class="grain"></div>
+
+  <!-- 1. ORIGIN -->
+  <div class="slide active" style="background:#000;" data-screen-label="01 Origin">
+    <div style="text-align:center;">
+      <div style="font-family:'Instrument Serif',serif;font-size:88px;letter-spacing:-0.06em;line-height:0.92;color:#fff;margin-bottom:40px;">Aethera</div>
+      <div style="font-family:'Inter',sans-serif;font-size:11px;letter-spacing:0.2em;text-transform:uppercase;color:rgba(255,255,255,0.3);">®</div>
+    </div>
+  </div>
+
+  <!-- 2. STATEMENT -->
+  <div class="slide" style="background:#fff;" data-screen-label="02 Statement">
+    <div style="width:65%;text-align:center;">
+      <div style="font-family:'Instrument Serif',serif;font-size:72px;letter-spacing:-0.06em;line-height:0.95;color:#000;text-wrap:pretty;">Beyond <em>silence</em>, we build <em>the eternal.</em></div>
+    </div>
+  </div>
+
+  <!-- 3. EXPANSION -->
+  <div class="slide" style="background:#fff;" data-screen-label="03 Expansion">
+    <div style="width:60%;display:flex;flex-direction:column;gap:40px;">
+      <div>
+        <div style="font-family:'Inter',sans-serif;font-size:10px;letter-spacing:0.16em;text-transform:uppercase;color:#A8A8A8;margin-bottom:20px;">Design as atmosphere</div>
+        <div style="font-family:'Instrument Serif',serif;font-size:56px;letter-spacing:-0.05em;line-height:0.95;color:#000;">Every frame should feel like a pause between noise.</div>
+      </div>
+      <div style="font-family:'Inter',sans-serif;font-size:17px;font-weight:300;line-height:1.6;color:#6F6F6F;letter-spacing:-0.01em;max-width:480px;">Quiet, precise, and deliberate. Not a screen — an atmosphere.</div>
+    </div>
+  </div>
+
+  <!-- 4. FRAGMENT -->
+  <div class="slide" style="background:#0D0D0D;" data-screen-label="04 Fragment">
+    <div style="width:65%;text-align:left;">
+      <div style="font-family:'Instrument Serif',serif;font-size:64px;letter-spacing:-0.05em;line-height:1.15;color:#fff;">We build<br>for those<br>who stay.</div>
+      <div style="margin-top:56px;font-family:'Instrument Serif',serif;font-size:32px;letter-spacing:-0.03em;line-height:1.4;color:#6F6F6F;">Past the noise.<br>Past the obvious.</div>
+    </div>
+  </div>
+
+  <!-- 5. TRANSITION -->
+  <div class="slide" style="background:#fff;" data-screen-label="05 Transition">
+    <div style="width:1px;height:80px;background:#000;opacity:0.15;"></div>
+  </div>
+
+  <!-- 6. CLOSURE -->
+  <div class="slide" style="background:#000;" data-screen-label="06 Closure">
+    <div style="text-align:center;display:flex;flex-direction:column;align-items:center;gap:52px;">
+      <div style="font-family:'Instrument Serif',serif;font-size:28px;letter-spacing:-0.03em;color:rgba(255,255,255,0.35);">Aethera®</div>
+      <button onclick="void(0)" style="font-family:'Inter',sans-serif;font-size:13px;font-weight:400;letter-spacing:0.1em;text-transform:uppercase;color:#fff;background:none;border:1px solid rgba(255,255,255,0.4);padding:16px 40px;cursor:pointer;transition:opacity 0.6s cubic-bezier(0.16,1,0.3,1);" onmouseover="this.style.opacity='0.5'" onmouseout="this.style.opacity='1'">Begin Journey</button>
+    </div>
+  </div>
+
+</div><!-- /.stage -->
+
+<!-- Nav -->
+<nav class="nav">
+  <button class="nav-btn" id="prev">← Prev</button>
+  <span class="nav-counter" id="counter">1 / 6</span>
+  <button class="nav-btn" id="next">Next →</button>
+</nav>
+
+<script>
+  // Scale stage to viewport
+  function scale() {
+    const s = document.getElementById('stage');
+    const scaleX = window.innerWidth / 1280;
+    const scaleY = window.innerHeight / 720;
+    const sc = Math.min(scaleX, scaleY);
+    s.style.transform = `scale(${sc})`;
+    s.style.left = (window.innerWidth - 1280 * sc) / 2 + 'px';
+    s.style.top  = (window.innerHeight - 720 * sc) / 2 + 'px';
+  }
+  window.addEventListener('resize', scale); scale();
+
+  const slides = document.querySelectorAll('.slide');
+  let cur = parseInt(localStorage.getItem('aethera-slide') || '0');
+
+  function go(n) {
+    slides[cur].classList.remove('active');
+    cur = (n + slides.length) % slides.length;
+    slides[cur].classList.add('active');
+    document.getElementById('counter').textContent = (cur + 1) + ' / ' + slides.length;
+    localStorage.setItem('aethera-slide', cur);
+  }
+
+  document.getElementById('prev').onclick = () => go(cur - 1);
+  document.getElementById('next').onclick = () => go(cur + 1);
+  document.addEventListener('keydown', e => {
+    if (e.key === 'ArrowRight' || e.key === 'ArrowDown') go(cur + 1);
+    if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   go(cur - 1);
+  });
+
+  go(cur);
+</script>
+</body>
+</html>

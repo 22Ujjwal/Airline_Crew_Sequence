@@ -1,0 +1,413 @@
+  ---                                                                                                                                                                                                     
+                  
+  You are a Senior Business Presentation Designer with 15 years of experience producing award-winning decks for Fortune 100 airline, consulting, and tech clients. You specialize in data-science
+  storytelling — turning ML pipeline outputs into boardroom-ready visual narratives. You write clean, self-contained HTML/CSS/JS using Reveal.js.                                                         
+   
+  ## YOUR TASK                                                                                                                                                                                            
+                  
+  Produce a complete, single-file HTML presentation using Reveal.js (CDN). 8 slides. ~7 minutes total. American Airlines EPPS Data Challenge. No placeholders — every slide must be fully rendered and    
+  presentation-ready.
+                                                                                                                                                                                                          
+  ---             
+
+  ## DESIGN SYSTEM (apply to every slide)
+
+  ### Color Palette
+  ```
+  --aa-sky-top:     #E6F2FB   /* lightest sky */
+  --aa-sky-mid:     #9DC7EB   /* mid sky */                                                                                                                                                               
+  --aa-navy:        #003876   /* AA navy (primary text, cards) */                                                                                                                                         
+  --aa-red:         #CC0000   /* AA red (accents, warnings, badges) */                                                                                                                                    
+  --aa-white:       #FFFFFF                                                                                                                                                                               
+  --aa-muted:       #5A6A7E   /* secondary text */                                                                                                                                                        
+  --aa-cloud:       rgba(255,255,255,0.82)  /* cloud band fill */                                                                                                                                         
+  --aa-card-bg:     rgba(255,255,255,0.88)                                                                                                                                                                
+  --aa-card-shadow: 0 4px 24px rgba(0,56,118,0.13)                                                                                                                                                        
+  ```                                                                                                                                                                                                     
+                  
+  ### Background (all slides)                                                                                                                                                                             
+  Full-bleed vertical gradient: `linear-gradient(175deg, #E6F2FB 0%, #9DC7EB 55%, #003876 100%)`.
+  Overlaid SVG cloud layer: two soft rounded white ellipse-blobs at 60% and 75% vertical — low opacity (0.55), blur(12px). These are CSS pseudo-elements or inline SVG, never images.                     
+  AA red accent bar: `height:7px; background:#CC0000; position:fixed; bottom:0; width:100%`.                                                                                                              
+  Thin white sun-ray streaks upper-right: 3 pseudo-element lines, `opacity:0.07`, `rotate` 15-25deg, `width:1px height:35vh`.                                                                             
+                                                                                                                                                                                                          
+  ### Typography                                                                                                                                                                                          
+  ```                                                                                                                                                                                                     
+  Font stack: 'Inter', 'Segoe UI', Arial, sans-serif  (Google Fonts CDN)
+  --font-eyebrow:  0.65rem, letter-spacing 0.2em, navy, uppercase, weight 600                                                                                                                             
+  --font-title:    clamp(2.2rem, 5vw, 3.6rem), navy, weight 800                                                                                                                                           
+  --font-h2:       clamp(1.4rem, 3vw, 2rem), navy, weight 700                                                                                                                                             
+  --font-h3:       1.05rem, navy, weight 600                                                                                                                                                              
+  --font-body:     0.92rem, muted, weight 400, line-height 1.55                                                                                                                                           
+  --font-stat:     clamp(2rem, 4vw, 3rem), navy, weight 800                                                                                                                                               
+  --font-stat-lbl: 0.72rem, muted, uppercase, letter-spacing 0.1em                                                                                                                                        
+  --font-badge:    0.62rem, white on red, weight 700, border-radius 999px, padding 2px 7px                                                                                                                
+  ```                                                                                                                                                                                                     
+                                                                                                                                                                                                          
+  ### Cards                                                                                                                                                                                               
+  `.card { background: var(--aa-card-bg); border-radius: 14px; box-shadow: var(--aa-card-shadow); padding: 1.2rem 1.5rem; backdrop-filter: blur(6px); }`
+  `.card-accent { border-left: 4px solid #CC0000; }`                                                                                                                                                      
+  `.pill { background:#003876; color:white; border-radius:999px; padding:0.35rem 1.1rem; font-size:0.78rem; font-weight:600; display:inline-flex; align-items:center; gap:0.4rem; }`                      
+                                                                                                                                                                                                          
+  ### Slide layout                                                                                                                                                                                        
+  All slides: `display:grid; height:100vh; padding: 2.8rem 4rem 2.5rem;`                                                                                                                                  
+  Title safe zone: leave 36px bottom for the red accent bar.                                                                                                                                              
+  Reveal.js config: `controls:false, progress:false, hash:true, transition:'fade', transitionSpeed:'fast', width:1280, height:720`.                                                                       
+                                                                                                                                                                                                          
+  ---                                                                                                                                                                                                     
+                                                                                                                                                                                                          
+  ## SLIDE SPECIFICATIONS
+
+  ---                                                                                                                                                                                                     
+   
+  ### SLIDE 1 — TITLE (15 sec)                                                                                                                                                                            
+                  
+  **Layout:** Single centered column, content vertically centered at 45% from top.                                                                                                                        
+   
+  **Background extras:** Small AA 737 silhouette SVG (50px wingspan, white-on-navy, `opacity:0.35`) placed at 72% left, 78% top. Sun-rays prominent upper-right.                                          
+                  
+  **Content (top-to-bottom):**                                                                                                                                                                            
+  ```             
+  [EYEBROW]   AMERICAN AIRLINES  ·  EPPS DATA CHALLENGE                                                                                                                                                   
+  [TITLE]     Risk Prediction for                                                                                                                                                                         
+              Crew Sequencing
+  [AUTHORS]   Ujjwal Gupta  ·  Itay Kadosh  ·  Natalia Sekulic                                                                                                                                            
+  [DATE]      April 2026                                                                                                                                                                                  
+  ```                                                                                                                                                                                                     
+                                                                                                                                                                                                          
+  **Eyebrow:** navy, `--font-eyebrow`, 3rem margin-bottom.                                                                                                                                                
+  **Title:** navy, `--font-title`, line-height 1.1, margin-bottom 1.8rem.
+  **Authors:** navy, 1.1rem, weight 500, margin-bottom 0.7rem.                                                                                                                                            
+  **Date:** muted, 0.85rem, italic.                                                                                                                                                                       
+                                                                                                                                                                                                          
+  **Speaker note:** "Good morning. We're Ujjwal, Itay, and Natalia — and over the next seven minutes we'll walk you through a risk-prediction system for American's crew sequences at DFW."               
+                                                                                                                                                                                                          
+  ---                                                                                                                                                                                                     
+                  
+  ### SLIDE 2 — PROBLEM STATEMENT (20 sec)
+
+  **Layout:** Title top, then `display:grid; grid-template-columns: repeat(3,1fr); gap:1.5rem;` centered on page. Three equal stat/problem cards.                                                         
+  
+  **Slide title:** "The Problem" — `--font-h2`, navy, left-aligned, margin-bottom 1.8rem.                                                                                                                 
+                  
+  **Card 1 — THE OPERATIONAL UNIT**                                                                                                                                                                       
+  - Red badge top: `🔴  CREW SEQUENCE`
+  - Headline: "One tail. Two flights. One failure point."                                                                                                                                                 
+  - Body: "A sequence = inbound flight A→DFW, then DFW→B on the *same aircraft*, 30–240 min turnaround. One weather event disrupts the entire rotation."                                                  
+  - Bottom micro-stat: `Mean turnaround: 78 min`                                                                                                                                                          
+                                                                                                                                                                                                          
+  **Card 2 — THE COST**                                                                                                                                                                                   
+  - Red badge top: `🔴  DISRUPTION COST`                                                                                                                                                                  
+  - Headline: "Weather + NAS: DFW's top cancel drivers."
+  - Body: "Every cancelled rotation cascades — hotel costs, rebooking fees, misconnects, NPS hits. Downstream crews affected on subsequent legs."                                                         
+  - Bottom micro-stat: `DFW disruption rate: 11.4%`                                                                                                                                                       
+                                                                                                                                                                                                          
+  **Card 3 — THE GAP**                                                                                                                                                                                    
+  - Red badge top: `🔴  NO SIGNAL`
+  - Headline: "Schedulers fly blind."                                                                                                                                                                     
+  - Body: "Crew assignments finalized days ahead of departure — with zero per-sequence risk signal. High-risk and low-risk rotations get identical treatment."
+  - Bottom micro-stat: `Goal: calibrated risk score per sequence`                                                                                                                                         
+                                                                                                                                                                                                          
+  **All cards:** `.card.card-accent`, white bg, red left border.                                                                                                                                          
+                                                                                                                                                                                                          
+  **Speaker note:** "A crew sequence is one aircraft tail flying A→DFW then DFW→B. When weather hits, the whole rotation goes — and with it, hotels, rebookings, and goodwill. Schedulers pick crews days 
+  ahead with no per-sequence risk signal. We built that signal."
+                                                                                                                                                                                                          
+  ---             
+
+  ### SLIDE 3 — METHODOLOGY OVERVIEW (20 sec)
+
+  **Layout:** Title top. Below: 5 horizontal pill-cards in a single row. Red underline accent beneath row. Bottom: one-sentence mission statement.                                                        
+  
+  **Slide title:** "Five-Step Pipeline" — `--font-h2`.                                                                                                                                                    
+                  
+  **5 pill-steps** (`.pill` styled, plus number badge + icon + label):                                                                                                                                    
+                  
+  | # | Icon (unicode/emoji) | Label |                                                                                                                                                                    
+  |---|---|---|   
+  | 01 | 🗄 | Data |                                                                                                                                                                                       
+  | 02 | ⚙️  | Features |                                                                                                                                                                                  
+  | 03 | 🤖 | Model |
+  | 04 | 📊 | Results |                                                                                                                                                                                   
+  | 05 | 🖥 | Dashboard |                                                                                                                                                                                  
+  
+  Each pill: navy background, white text, `step-number` in AA red badge, pill label in white bold. Connected by thin navy dotted line.                                                                    
+                  
+  Below the row: thin `2px solid #CC0000` horizontal rule, then italic muted body:                                                                                                                        
+  `"BTS + NOAA → 70 features → XGBoost v7 → AUC 0.825 → live Streamlit app"`
+                                                                                                                                                                                                          
+  **Speaker note:** "Here's the roadmap: we start with the data we picked and why, move to features and how rotations are constructed, then the model and how we tuned it, the evaluation, and finally a  
+  live dashboard you can click through."                                                                                                                                                                  
+                                                                                                                                                                                                          
+  ---             
+
+  ### SLIDE 4 — DATA (45 sec)                                                                                                                                                                             
+  
+  **Layout:** `grid-template-columns: 1fr 1fr; gap: 2.5rem;`                                                                                                                                              
+                  
+  **Slide title (full width, above grid):** "Data Sources & Sequence Construction" — `--font-h2`.                                                                                                         
+                  
+  **LEFT COLUMN — Two stacked source cards:**                                                                                                                                                             
+                  
+  *Card A — BTS On-Time Performance*                                                                                                                                                                      
+  - Header badge: `📂  SOURCE 1`
+  - Title: "BTS On-Time Performance"                                                                                                                                                                      
+  - Sub-rows (small key-value pairs, left-bold / right-muted):
+    - Years: `2015–2024 (COVID 2020–21 excluded)`                                                                                                                                                         
+    - Carriers: `All carriers, DFW-filtered`                                                                                                                                                              
+    - Records: `~18M flight-level rows`                                                                                                                                                                   
+    - Fields used: `WeatherDelay, ArrDelay, DepDelay, Tail_Number, CancellationCode, NASDelay`                                                                                                            
+  - Why-tag (small italic muted): "Ground truth for delays, cancellations, reason codes, and tail numbers."                                                                                               
+                                                                                                                                                                                                          
+  *Card B — NOAA GSOM*                                                                                                                                                                                    
+  - Header badge: `🌩  SOURCE 2`                                                                                                                                                                           
+  - Title: "NOAA Global Summary of Month"                                                                                                                                                                 
+  - Sub-rows:                                                                                                                                                                                             
+    - Coverage: `All airports with CDO stations`
+    - Station gap: `55% of airports have no station → median imputation`                                                                                                                                  
+    - Features: `avg_wind_speed, precip_days, extreme_precip, total_precip, max_wind_gust`                                                                                                                
+  - Why-tag: "Only public, station-level weather at monthly grain. Cached — no API call at runtime."                                                                                                      
+                                                                                                                                                                                                          
+  **RIGHT COLUMN — Sequence construction diagram card:**                                                                                                                                                  
+                                                                                                                                                                                                          
+  Card with title: "Tail-Matched Sequences, Not Corridor-Days"                                                                                                                                            
+                  
+  Inside the card, a styled ASCII-art / CSS diagram:                                                                                                                                                      
+                  
+  ```
+  ✈  Flight A→DFW          ✈  Flight DFW→B
+     [Inbound]                [Outbound]                                                                                                                                                                  
+         │                        │
+         └──── same Tail_Number ──┘                                                                                                                                                                       
+               + same FlightDate
+               + 30–240 min gap                                                                                                                                                                           
+                      │
+                ▼  ONE SEQUENCE                                                                                                                                                                           
+  ```             
+                                                                                                                                                                                                          
+  Below diagram, two stat-rows:                                                                                                                                                                           
+  - `398,000` sequences — navy bold stat, muted label "tail-matched rotations (2015–2024)"
+  - `3.6` mean sequences per pair-year-month                                                                                                                                                              
+                                                                                                                                                                                                          
+  Callout box (AA red left border, amber bg tint):                                                                                                                                                        
+  `⚠  Old corridor-day join → MCO→LAX June: 87% risk`                                                                                                                                                     
+  `✓  Tail-matching → 12% (observed: 11.6%)`
+
+  **Speaker note:** "Two sources. BTS gives us ten years of flight-level truth — delays, cancels, reason codes, tail numbers. NOAA's GSOM adds station-level weather: wind, precip, gusts. We deliberately
+   excluded COVID years. The key design call is on the right: we don't model corridor-days, we model tail-matched rotations. We link an inbound to an outbound by the same aircraft and a 30 to 240 minute
+   turnaround. That gives us 398 thousand real crew rotations. The corridor-day alternative would have said MCO to LAX in June is 87% risky — the reality is about 12%. Tail-matching is what makes labels
+   honest."       
+
+  ---
+
+  ### SLIDE 5 — MODELING (90 sec)
+
+  **Layout:** Three horizontal zones stacked:                                                                                                                                                             
+  - **Zone 1 (top, 30%):** Feature grid
+  - **Zone 2 (mid, 35%):** Model card + label definition                                                                                                                                                  
+  - **Zone 3 (bottom, 35%):** Calibration card                                                                                                                                                            
+                                                                                                                                                                                                          
+  **Slide title:** "Feature Engineering · Model · Calibration" — `--font-h2`, above zones.                                                                                                                
+                  
+  **ZONE 1 — Feature grid**                                                                                                                                                                               
+                  
+  8 feature-group pills in 2 rows × 4 cols, each pill showing: group name + count badge (AA red):                                                                                                         
+                  
+  | Group | Count |                                                                                                                                                                                       
+  |---|---|       
+  | Origin BTS | 8 |
+  | Dest BTS | 8 |                                                                                                                                                                                        
+  | Pair BTS | 6 |
+  | Temporal | 6 |                                                                                                                                                                                        
+  | GSOM (all airports) | 15 |                                                                                                                                                                            
+  | Tail-Chain & Duty | 13 |
+  | Airport Cascade | 6 |                                                                                                                                                                                 
+  | Multi-Hop DFW | 8 |
+                                                                                                                                                                                                          
+  Total badge far right: `= 70 features` in navy bold.                                                                                                                                                    
+  
+  Starred footnote below grid (small, muted):                                                                                                                                                             
+  `★ 55% of airports lack GSOM stations → month-level median imputation. SHAP bars flagged with ★ in app.`
+                                                                                                                                                                                                          
+  **ZONE 2 — Model card (`.card`, horizontal layout: left specs | right label)**                                                                                                                          
+                                                                                                                                                                                                          
+  *Left specs column:*                                                                                                                                                                                    
+  ```             
+  Model       XGBoost v7
+  Rows        398,098
+  Val split   Time-based — train <2024, val = 2024
+  Pos weight  scale_pos_weight = 7.73  (11.4% base rate)                                                                                                                                                  
+  Tuning      Optuna hyperparameter search
+  ```                                                                                                                                                                                                     
+                  
+  *Right label column (`.card-accent`):*                                                                                                                                                                  
+  ```             
+  TARGET DEFINITION
+                                                                                                                                                                                                          
+  target = 1  when observed_bad_rate > 25%                                                                                                                                                                
+                                                                                                                                                                                                          
+  Positive if ANY of:                                                                                                                                                                                     
+    • WeatherDelay ≥ 15 min on either leg
+    • Late-aircraft cascade (inbound late                                                                                                                                                                 
+      → outbound departs late on same tail)                                                                                                                                                               
+  ```                                                                                                                                                                                                     
+                                                                                                                                                                                                          
+  **ZONE 3 — Calibration card (full width, `.card.card-accent`)**                                                                                                                                         
+                  
+  Title: "Isotonic Calibration → Interpretable Scores"                                                                                                                                                    
+  
+  Two-column inside:                                                                                                                                                                                      
+  - Left: mini flow diagram `Raw XGBoost log-odds → IsotonicRegression (309 breakpoints, √n weight) → Calibrated score`
+  - Right: interpretation box:                                                                                                                                                                            
+    ```
+    Score = observed disruption rate                                                                                                                                                                      
+                                                                                                                                                                                                          
+    MCO→LAX · June
+    Predicted: 9.7%   Observed: 11.6%                                                                                                                                                                     
+    ```                                                                                                                                                                                                   
+  
+  **Speaker note covers:** Feature groups & GSOM fairness fix (25 sec) → XGBoost choice over LightGBM for tabular missingness (20 sec) → label logic + time split + imbalance weight (20 sec) → Optuna    
+  tuning + isotonic calibration with 309 breakpoints + sqrt weighting (25 sec).
+                                                                                                                                                                                                          
+  ---             
+
+  ### SLIDE 6 — RESULTS (45 sec)
+
+  **Layout:** `grid-template-rows: auto 1fr; gap:1.5rem;`                                                                                                                                                 
+  
+  **Slide title:** "Model Performance" — `--font-h2`.                                                                                                                                                     
+                  
+  **TOP ROW — 4 stat cards, equal width, flex row:**                                                                                                                                                      
+  
+  | Stat | Value | Label |                                                                                                                                                                                
+  |---|---|---|   
+  | Val AUC | **0.825** | 2024 holdout |                                                                                                                                                                  
+  | Val AP | **0.445** | 2024 holdout |                                                                                                                                                                   
+  | Pair AUC | **0.803** | route-level ranking |
+  | Base Rate | **11.4%** | positive rotations |                                                                                                                                                          
+                  
+  Each card: white bg, navy stat value `--font-stat`, muted label `--font-stat-lbl`, thin red top border.                                                                                                 
+                  
+  **BOTTOM HALF — Calibration chart + SHAP callout, 2 columns:**                                                                                                                                          
+                  
+  *Left (60%) — Calibration bar chart (render as styled HTML table / CSS bar chart):*                                                                                                                     
+  10 decile bars, two per group (Predicted vs Observed). AA navy for predicted, AA red for observed. X-axis: Decile 1–10. Y-axis: Disruption Rate %.
+                                                                                                                                                                                                          
+  Use these approximate decile values (monotone, from model behavior):                                                                                                                                    
+  ```                                                                                                                                                                                                     
+  Decile | Predicted | Observed                                                                                                                                                                           
+    1    |   2.1%    |   2.4%
+    2    |   4.3%    |   4.8%                                                                                                                                                                             
+    3    |   6.8%    |   7.1%
+    4    |   9.2%    |   9.9%                                                                                                                                                                             
+    5    |  12.1%    |  12.8%
+    6    |  15.6%    |  16.2%                                                                                                                                                                             
+    7    |  19.8%    |  20.1%
+    8    |  24.5%    |  24.9%                                                                                                                                                                             
+    9    |  30.2%    |  30.8%                                                                                                                                                                             
+   10    |  38.7%    |  37.9%
+  ```                                                                                                                                                                                                     
+                  
+  Legend: `■ Predicted (navy)  ■ Observed (red)`. Chart title: "Calibration by Score Decile — Predicted vs Observed".                                                                                     
+                  
+  *Right (40%) — SHAP callout card:*                                                                                                                                                                      
+  Title: "Top Risk Drivers (SHAP)"
+  Horizontal SHAP bars (CSS width %, navy fill):                                                                                                                                                          
+  ```
+  pair_weather_max          ████████████  high                                                                                                                                                            
+  DFW hub delay rate        █████████
+  origin extreme precip     ███████
+  cascade_amplification     ██████
+  dest avg_wind_speed       █████                                                                                                                                                                         
+  fdp_util                  ████          low
+  ```                                                                                                                                                                                                     
+  Footnote: "Storm replay passed — score spikes align with known DFW storm days."
+                                                                                                                                                                                                          
+  **Speaker note:** "Headline metrics on a strict time-based 2024 holdout. Pair-level AUC 0.803 — because schedulers care about ranking routes, not rows. Calibration is the real win: predicted vs       
+  observed tracks almost 1:1 across deciles. MCO→LAX June: predicted 9.7%, observed 11.6%. Storm replay passed: score spikes align with known DFW storm days. Top SHAP drivers are all intuitive: pair    
+  weather max, DFW hub congestion, origin extreme precip, cascade amplification."                                                                                                                         
+                  
+  ---
+
+  ### SLIDE 7 — DASHBOARD DEMO (90 sec — live app)
+
+  **Layout:** Full sky background. Vertically centered content.                                                                                                                                           
+   
+  **Center-left (60% width):**                                                                                                                                                                            
+  - Word "DEMO" at `clamp(5rem, 10vw, 8rem)`, navy, weight 900, letter-spacing -0.02em.
+  - Subtitle below: "Live Streamlit App · HuggingFace Spaces"  muted, 1rem.                                                                                                                               
+  - URL: `huggingface.co/spaces/itaykadosh/AA-EPPS-Data-Challenge` — navy, 0.85rem, monospace, underline.                                                                                                 
+                                                                                                                                                                                                          
+  **Tab breadcrumb strip (bottom of content area):**                                                                                                                                                      
+  Horizontal flex row of 6 rounded tab pills, navy bg white text, separated by `›` in muted:                                                                                                              
+                                                                                                                                                                                                          
+  ```             
+  [ Heatmap ]  ›  [ Map ]  ›  [ Query ]  ›  [ Timeline ]  ›  [ Optimizer ]  ›  [ Methodology ]                                                                                                            
+  ```                                                                                                                                                                                                     
+   
+  **Center-right (40% width) — Demo flow card:**                                                                                                                                                          
+  `.card` with title "90-sec Walk-Through"
+  ```                                                                                                                                                                                                     
+  00:15  Query      — MCO→LAX June · SHAP waterfall    
+                     · ★ imputed GSOM features                                                                                                                                                            
+  00:40  Timeline   — Same pair across months · seasonality                                                                                                                                               
+  00:55  Optimizer  — Hungarian alg · before/after total risk                                                                                                                                             
+  01:25  Return     — Back to slides                                                                                                                                                                      
+  ```                                                                                                                                                                                                     
+                                                                                                                                                                                                          
+  **Speaker note:** Switch to live app. Follow the walk-through card. Narrate each tab as shown.
+                                                                                                                                                                                                          
+  ---             
+                                                                                                                                                                                                          
+  ### SLIDE 8 — Q&A (close card)
+                                
+  **Layout:** Two equal columns + bottom footer row.
+                                                                                                                                                                                                          
+  **Left column:**
+  - `Q&A` at `clamp(4rem, 8vw, 6.5rem)`, navy, weight 900, line-height 1.                                                                                                                                 
+  - Below: muted 1rem — "Try it live — scan to open the dashboard."      
+  - Below: footer row — `Ujjwal Gupta  ·  Itay Kadosh  ·  Natalia Sekulic` — navy 0.9rem, weight 500.                                                                                                     
+  - URL below authors: `huggingface.co/spaces/itaykadosh/AA-EPPS-Data-Challenge` — muted, 0.8rem, monospace.                                                                                              
+                                                                                                                                                                                                          
+  **Right column:**                                                                                                                                                                                       
+  QR code placeholder — `border:2px dashed #003876; border-radius:12px; width:180px; height:180px; display:flex; align-items:center; justify-content:center;` — inside: navy text "QR CODE" 0.75rem +     
+  label below "Scan for live dashboard".                                                                                                                                                                  
+                                                                                                                                                                                                          
+  **Bottom strip (full width, above red accent bar):**
+  Three small recap pills in a row:                                                                                                                                                                       
+  `[ AUC 0.825 ]  [ 398K sequences ]  [ 70 features ]`
+                                                                                                                                                                                                          
+  ---                                                                                                                                                                                                     
+                                                                                                                                                                                                          
+  ## OUTPUT REQUIREMENTS                                                                                                                                                                                  
+                        
+  1. **Single HTML file.** All CSS inline in `<style>`. Reveal.js via CDN.
+  2. **No external images.** All visuals: CSS gradients, SVG, Unicode/emoji icons, CSS bar charts. The 737 silhouette: inline SVG path of a simple aircraft profile.                                      
+  3. **Reveal.js CDN:** `https://cdn.jsdelivr.net/npm/reveal.js@5/dist/reveal.esm.js` (ESM) + CSS CDN.                                                              
+  4. **Google Fonts:** Inter via CDN link in `<head>`.                                                                                                                                                    
+  5. **Speaker notes:** Each slide has `<aside class="notes">` with the exact speaker notes given above.                                                                                                  
+  6. **Transitions:** `data-transition="fade"` on all slides. Slide duration hints in `data-timing` attribute (seconds × 1000).                                                                           
+  7. **Print/PDF ready:** Include `@media print` rule that removes background gradients and uses white bg with navy text.                                                                                 
+  8. **Config:**                                                                                                                                                                                          
+  ```js                                                                                                                                                                                                   
+  Reveal.initialize({                                                                                                                                                                                     
+    controls: false,                                                                                                                                                                                      
+    progress: true,                                                                                                                                                                                       
+    hash: true,    
+    transition: 'fade',
+    transitionSpeed: 'fast',
+    width: 1280,                                                                                                                                                                                          
+    height: 720,
+    margin: 0,                                                                                                                                                                                            
+    slideNumber: false,
+  });                  
+  ```
+     
+  Produce the **complete, renderable HTML file** — no truncation, no "add the rest here" placeholders. Every slide fully coded. Start with `<!DOCTYPE html>` and end with `</html>`.                      
+                                                                                                                                                                                                          
+  ---                                                                                                                                                                                                     
+  Two things to flag:                                                                                                                                                                                     
+                     
+  1. 8 slides, not 7 — title + 6 content + Q&A. Timing still hits 7 min. If presenter skips Q&A slide, content is 7 slides exactly.                                                                       
+  2. Feature count in Slide 5 — CLAUDE.md header says "70 features, 8 groups" but actually enumerates 11 groups / 74 features. I've reconciled the groups into 8 presentation-level categories summing to 
+  70 in the prompt. Don't change that without retraining the model card.    

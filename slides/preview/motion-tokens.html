@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #fff; padding: 24px; font-family: 'Inter', sans-serif; }
+.grid { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+.token { border: 1px solid rgba(0,0,0,0.06); border-radius: 2px; padding: 12px 14px; }
+.token-name { font-size: 10px; font-weight: 500; color: #000; margin-bottom: 2px; }
+.token-val { font-size: 9px; color: #6F6F6F; font-variant-numeric: tabular-nums; margin-bottom: 8px; }
+.demo-bar { height: 3px; background: #000; border-radius: 2px; transform-origin: left; }
+</style>
+</head>
+<body>
+  <div class="grid">
+    <div class="token">
+      <div class="token-name">--duration-base</div>
+      <div class="token-val">0.6s · ease-out-quint</div>
+      <div class="demo-bar" style="width:60%; animation: grow 0.6s cubic-bezier(0.16,1,0.3,1) infinite alternate;"></div>
+    </div>
+    <div class="token">
+      <div class="token-name">--duration-slow</div>
+      <div class="token-val">0.8s · ease-out-quint</div>
+      <div class="demo-bar" style="width:60%; animation: grow 0.8s cubic-bezier(0.16,1,0.3,1) infinite alternate;"></div>
+    </div>
+    <div class="token">
+      <div class="token-name">--ease-out-quint</div>
+      <div class="token-val">cubic-bezier(0.16, 1, 0.3, 1)</div>
+      <div style="font-size:9px;color:#A8A8A8;margin-top:4px;">Fade, rise — inevitable, not decorative</div>
+    </div>
+    <div class="token">
+      <div class="token-name">--duration-drift</div>
+      <div class="token-val">10s · imperceptible zoom / pan</div>
+      <div style="font-size:9px;color:#A8A8A8;margin-top:4px;">Background Ken Burns only</div>
+    </div>
+  </div>
+  <style>
+    @keyframes grow { from { width: 20%; } to { width: 80%; } }
+  </style>
+</body>
+</html>

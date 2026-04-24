@@ -1,0 +1,727 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Risk Prediction for Crew Sequencing — AA EPPS Data Challenge</title>
+<link href="https://fonts.googleapis.com/css2?family=Instrument+Serif:ital@0;1&family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+/* ════════════════════════════════════════════
+   COLOR TOKENS
+════════════════════════════════════════════ */
+:root {
+  --white:       #FFFFFF;
+  --black:       #000000;
+  --near-black:  #0D0D0D;
+  --off-white:   #F4F6F8;
+  --grey:        #c7d0d7;
+  --grey-dark:   #8a9aa6;
+  --blue:        #0d73b1;
+  --blue2:       #14acdc;
+  --red:         #b61f23;
+  --font-serif:  'Instrument Serif', Georgia, serif;
+  --font-sans:   'Inter', system-ui, sans-serif;
+  --ease:        cubic-bezier(0.16, 1, 0.3, 1);
+  --dur:         0.7s;
+}
+
+/* ════════════════════════════════════════════
+   RESET
+════════════════════════════════════════════ */
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: #000; width: 100vw; height: 100vh; overflow: hidden; }
+button { cursor: pointer; border: none; background: none; }
+
+/* ════════════════════════════════════════════
+   STAGE
+════════════════════════════════════════════ */
+#stage { width: 1280px; height: 720px; position: absolute; transform-origin: top left; overflow: hidden; }
+
+/* ════════════════════════════════════════════
+   GRAIN
+════════════════════════════════════════════ */
+.grain {
+  position: absolute; inset: 0; z-index: 200; pointer-events: none;
+  background-image: url("data:image/svg+xml,%3Csvg viewBox='0 0 256 256' xmlns='http://www.w3.org/2000/svg'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='0.9' numOctaves='4' stitchTiles='stitch'/%3E%3C/filter%3E%3Crect width='100%25' height='100%25' filter='url(%23n)'/%3E%3C/svg%3E");
+  opacity: 0.022;
+}
+
+/* ════════════════════════════════════════════
+   SLIDES
+════════════════════════════════════════════ */
+.slide { position: absolute; inset: 0; opacity: 0; pointer-events: none; transition: opacity var(--dur) var(--ease); }
+.slide.active { opacity: 1; pointer-events: auto; }
+.slide-inner { position: absolute; inset: 0; display: flex; flex-direction: column; padding: 64px 100px 56px; }
+
+/* ════════════════════════════════════════════
+   COVER CLOUD SCENE
+════════════════════════════════════════════ */
+.cover-bg {
+  position: absolute; inset: 0;
+  background: linear-gradient(160deg, #0a1628 0%, #0d2444 40%, #0d3a60 75%, #0a2036 100%);
+  overflow: hidden;
+}
+
+/* Cloud layers */
+.cloud-layer { position: absolute; will-change: transform; }
+
+@keyframes drift1 {
+  0%   { transform: translate(0px, 0px) scale(1); }
+  30%  { transform: translate(18px, -6px) scale(1.01); }
+  60%  { transform: translate(8px, 4px) scale(0.99); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+@keyframes drift2 {
+  0%   { transform: translate(0px, 0px) scale(1); }
+  40%  { transform: translate(-14px, 8px) scale(1.02); }
+  70%  { transform: translate(10px, -4px) scale(0.98); }
+  100% { transform: translate(0px, 0px) scale(1); }
+}
+@keyframes drift3 {
+  0%   { transform: translate(0px, 0px); }
+  50%  { transform: translate(22px, -10px); }
+  100% { transform: translate(0px, 0px); }
+}
+
+/* Airplane animation */
+@keyframes fly {
+  0%   { transform: translate(-120px, 80px) rotate(-3deg); opacity: 0; }
+  8%   { opacity: 0.9; }
+  92%  { opacity: 0.9; }
+  100% { transform: translate(1400px, -60px) rotate(-3deg); opacity: 0; }
+}
+.airplane {
+  position: absolute;
+  top: 42%;
+  left: 0;
+  z-index: 10;
+  animation: fly 18s cubic-bezier(0.2, 0.0, 0.8, 1.0) infinite;
+  animation-delay: 2s;
+}
+
+/* Cover gradient overlay for text protection */
+.cover-overlay {
+  position: absolute; inset: 0;
+  background: linear-gradient(to right, rgba(8,18,38,0.85) 0%, rgba(8,18,38,0.5) 55%, rgba(8,18,38,0.15) 100%);
+  z-index: 5;
+}
+
+/* ════════════════════════════════════════════
+   TYPE
+════════════════════════════════════════════ */
+.eyebrow {
+  font-family: var(--font-sans); font-size: 11px; font-weight: 400;
+  letter-spacing: 0.18em; text-transform: uppercase; color: var(--blue2); margin-bottom: 20px;
+}
+.h3 { font-family: var(--font-serif); font-size: 28px; letter-spacing: -0.04em; line-height: 1.1; color: var(--blue); }
+.body { font-family: var(--font-sans); font-size: 14px; font-weight: 300; line-height: 1.65; letter-spacing: -0.01em; color: #4a5e6e; }
+.caption { font-family: var(--font-sans); font-size: 10px; font-weight: 400; letter-spacing: 0.14em; text-transform: uppercase; color: var(--grey-dark); }
+.stat-num { font-family: var(--font-serif); font-size: 46px; letter-spacing: -0.05em; line-height: 1; color: var(--blue); }
+.stat-lbl { font-family: var(--font-sans); font-size: 10px; font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; color: var(--grey-dark); margin-top: 5px; }
+
+/* ════════════════════════════════════════════
+   LAYOUT
+════════════════════════════════════════════ */
+.two-col { display: grid; grid-template-columns: 1fr 1fr; gap: 52px; flex: 1; }
+.three-col { display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 28px; flex: 1; }
+
+/* ════════════════════════════════════════════
+   KV ROWS
+════════════════════════════════════════════ */
+.kv { display: flex; gap: 14px; padding: 6px 0; border-bottom: 1px solid var(--grey); }
+.kv:last-child { border-bottom: none; }
+.kv-k { font-family: var(--font-sans); font-size: 12px; font-weight: 500; color: var(--blue); min-width: 76px; }
+.kv-v { font-family: var(--font-sans); font-size: 12px; font-weight: 300; color: #4a5e6e; letter-spacing: -0.01em; }
+.kv-dark { border-bottom-color: rgba(255,255,255,0.07); }
+.kv-dark .kv-k { color: var(--blue2); }
+.kv-dark .kv-v { color: rgba(255,255,255,0.4); }
+
+/* ════════════════════════════════════════════
+   SHAP
+════════════════════════════════════════════ */
+.shap-row { display: flex; align-items: center; gap: 10px; margin-bottom: 8px; }
+.shap-lbl { font-family: var(--font-sans); font-size: 12px; font-weight: 300; color: #4a5e6e; min-width: 155px; }
+.shap-track { flex: 1; height: 3px; background: var(--grey); border-radius: 2px; }
+.shap-fill { height: 100%; background: var(--blue); border-radius: 2px; }
+
+/* ════════════════════════════════════════════
+   STAT CARD
+════════════════════════════════════════════ */
+.sc { border-top: 2px solid var(--blue2); padding-top: 12px; flex: 1; }
+.sc.accent { border-top-color: var(--red); }
+
+/* ════════════════════════════════════════════
+   PIPELINE
+════════════════════════════════════════════ */
+.pipe-step { display: flex; flex-direction: column; align-items: center; gap: 6px; flex: 1; }
+.pipe-num { font-family: var(--font-sans); font-size: 10px; font-weight: 500; letter-spacing: 0.12em; color: var(--blue2); }
+.pipe-label { font-family: var(--font-sans); font-size: 12px; font-weight: 400; letter-spacing: 0.1em; text-transform: uppercase; color: var(--blue); border: 1px solid var(--blue); padding: 6px 14px; }
+.pipe-sep { flex: none; width: 24px; height: 1px; background: var(--grey); align-self: center; margin-bottom: 20px; }
+.pipe-detail { font-family: var(--font-sans); font-size: 10px; font-weight: 300; color: var(--grey-dark); text-align: center; line-height: 1.4; max-width: 100px; margin-top: 4px; }
+
+/* ════════════════════════════════════════════
+   CALLOUT
+════════════════════════════════════════════ */
+.callout { border-left: 2px solid var(--blue2); padding: 8px 12px; font-family: var(--font-sans); font-size: 12px; font-weight: 300; color: #4a5e6e; line-height: 1.7; background: rgba(20,172,220,0.04); }
+
+/* ════════════════════════════════════════════
+   FPILL
+════════════════════════════════════════════ */
+.fpill { display: flex; align-items: center; justify-content: space-between; padding: 6px 10px; border: 1px solid rgba(13,115,177,0.2); font-family: var(--font-sans); font-size: 11px; font-weight: 400; color: var(--blue); background: rgba(13,115,177,0.03); }
+.fpill-count { font-size: 10px; font-weight: 600; color: var(--blue2); }
+
+/* ════════════════════════════════════════════
+   NAV
+════════════════════════════════════════════ */
+#nav { position: fixed; bottom: 22px; left: 50%; transform: translateX(-50%); display: flex; align-items: center; gap: 22px; z-index: 999; }
+.nav-btn { font-family: var(--font-sans); font-size: 10px; font-weight: 400; letter-spacing: 0.12em; text-transform: uppercase; color: rgba(255,255,255,0.3); padding: 7px 18px; border: 1px solid rgba(255,255,255,0.1); transition: opacity 0.4s; }
+.nav-btn:hover { opacity: 0.5; }
+.nav-counter { font-family: var(--font-sans); font-size: 10px; letter-spacing: 0.1em; color: rgba(255,255,255,0.15); }
+
+@media print {
+  body { background: white; }
+  .slide { position: relative; opacity: 1 !important; pointer-events: auto; page-break-after: always; }
+  #nav { display: none; }
+}
+</style>
+</head>
+<body>
+<div id="stage">
+<div class="grain"></div>
+
+<!-- ══════════════════════════════════════
+     1 · TITLE
+══════════════════════════════════════ -->
+<div class="slide active" data-screen-label="01 Title">
+
+  <!-- Cinematic cloud background -->
+  <div class="cover-bg">
+
+    <!-- Cloud layer 1 — large, deep -->
+    <div class="cloud-layer" style="top:8%;left:-10%;animation:drift1 22s ease-in-out infinite;">
+      <svg viewBox="0 0 900 260" width="900" height="260" xmlns="http://www.w3.org/2000/svg">
+        <filter id="blur1"><feGaussianBlur stdDeviation="28"/></filter>
+        <ellipse cx="320" cy="130" rx="280" ry="90" fill="rgba(255,255,255,0.06)" filter="url(#blur1)"/>
+        <ellipse cx="580" cy="110" rx="200" ry="70" fill="rgba(255,255,255,0.04)" filter="url(#blur1)"/>
+        <ellipse cx="200" cy="150" rx="160" ry="55" fill="rgba(255,255,255,0.05)" filter="url(#blur1)"/>
+      </svg>
+    </div>
+
+    <!-- Cloud layer 2 — mid -->
+    <div class="cloud-layer" style="top:30%;right:-5%;animation:drift2 28s ease-in-out infinite;animation-delay:-8s;">
+      <svg viewBox="0 0 800 220" width="800" height="220" xmlns="http://www.w3.org/2000/svg">
+        <filter id="blur2"><feGaussianBlur stdDeviation="22"/></filter>
+        <ellipse cx="400" cy="110" rx="340" ry="80" fill="rgba(255,255,255,0.055)" filter="url(#blur2)"/>
+        <ellipse cx="180" cy="90" rx="150" ry="55" fill="rgba(255,255,255,0.035)" filter="url(#blur2)"/>
+        <ellipse cx="620" cy="130" rx="180" ry="60" fill="rgba(255,255,255,0.04)" filter="url(#blur2)"/>
+      </svg>
+    </div>
+
+    <!-- Cloud layer 3 — foreground wisps -->
+    <div class="cloud-layer" style="top:55%;left:5%;animation:drift3 34s ease-in-out infinite;animation-delay:-14s;">
+      <svg viewBox="0 0 1100 200" width="1100" height="200" xmlns="http://www.w3.org/2000/svg">
+        <filter id="blur3"><feGaussianBlur stdDeviation="18"/></filter>
+        <ellipse cx="200" cy="100" rx="180" ry="50" fill="rgba(255,255,255,0.04)" filter="url(#blur3)"/>
+        <ellipse cx="550" cy="90" rx="260" ry="60" fill="rgba(255,255,255,0.05)" filter="url(#blur3)"/>
+        <ellipse cx="900" cy="110" rx="190" ry="45" fill="rgba(255,255,255,0.03)" filter="url(#blur3)"/>
+      </svg>
+    </div>
+
+    <!-- Cloud layer 4 — highlight wisps top right -->
+    <div class="cloud-layer" style="top:-5%;right:10%;animation:drift1 26s ease-in-out infinite;animation-delay:-5s;">
+      <svg viewBox="0 0 600 180" width="600" height="180" xmlns="http://www.w3.org/2000/svg">
+        <filter id="blur4"><feGaussianBlur stdDeviation="24"/></filter>
+        <ellipse cx="300" cy="90" rx="250" ry="65" fill="rgba(20,172,220,0.06)" filter="url(#blur4)"/>
+        <ellipse cx="150" cy="80" rx="120" ry="40" fill="rgba(13,115,177,0.05)" filter="url(#blur4)"/>
+      </svg>
+    </div>
+
+    <!-- Airplane SVG -->
+    <div class="airplane">
+      <svg viewBox="0 0 160 48" width="160" height="48" xmlns="http://www.w3.org/2000/svg" opacity="0.85">
+        <!-- Fuselage -->
+        <path d="M10,24 Q40,20 120,22 L148,24 L120,26 Q40,28 10,24 Z" fill="rgba(255,255,255,0.9)"/>
+        <!-- Nose cone -->
+        <path d="M148,24 L158,24 Q162,24 148,24" fill="rgba(255,255,255,0.9)"/>
+        <!-- Cockpit windows -->
+        <ellipse cx="138" cy="22" rx="6" ry="3" fill="rgba(20,172,220,0.6)"/>
+        <!-- Main wing -->
+        <path d="M60,23 L75,5 L95,8 L80,23 Z" fill="rgba(255,255,255,0.85)"/>
+        <path d="M60,25 L75,43 L95,40 L80,25 Z" fill="rgba(255,255,255,0.85)"/>
+        <!-- Tail fin vertical -->
+        <path d="M22,23 L30,10 L38,14 L35,23 Z" fill="rgba(255,255,255,0.85)"/>
+        <!-- Tail fin horizontal -->
+        <path d="M22,24 L15,18 L25,20 L35,24 Z" fill="rgba(255,255,255,0.75)"/>
+        <path d="M22,24 L15,30 L25,28 L35,24 Z" fill="rgba(255,255,255,0.75)"/>
+        <!-- Engine nacelle -->
+        <ellipse cx="72" cy="28" rx="10" ry="4" fill="rgba(199,208,215,0.7)"/>
+        <!-- Winglet -->
+        <path d="M95,8 L98,2 L100,8 Z" fill="rgba(255,255,255,0.6)"/>
+        <path d="M95,40 L98,46 L100,40 Z" fill="rgba(255,255,255,0.6)"/>
+        <!-- AA stripe hint -->
+        <rect x="105" y="21" width="30" height="2" fill="rgba(182,31,35,0.6)" rx="1"/>
+      </svg>
+    </div>
+
+    <!-- Atmospheric depth gradient -->
+    <div style="position:absolute;inset:0;background:radial-gradient(ellipse at 30% 50%, rgba(13,115,177,0.08) 0%, transparent 65%);"></div>
+    <div style="position:absolute;bottom:0;left:0;right:0;height:180px;background:linear-gradient(to top, rgba(8,18,38,0.6) 0%, transparent 100%);"></div>
+    <div style="position:absolute;top:0;left:0;right:0;height:100px;background:linear-gradient(to bottom, rgba(8,18,38,0.3) 0%, transparent 100%);"></div>
+  </div>
+
+  <!-- Text overlay -->
+  <div class="cover-overlay"></div>
+  <div class="slide-inner" style="align-items:flex-start;justify-content:center;z-index:10;">
+    <div style="max-width:700px;">
+      <div style="font-family:var(--font-sans);font-size:11px;font-weight:400;letter-spacing:0.2em;text-transform:uppercase;color:var(--blue2);margin-bottom:32px;opacity:0.8;">American Airlines &nbsp;·&nbsp; EPPS Data Challenge</div>
+      <div style="font-family:var(--font-serif);font-size:62px;letter-spacing:-0.045em;line-height:1.0;color:var(--white);margin-bottom:36px;">Risk Prediction for<br><em>Crew Sequencing</em></div>
+      <div style="width:36px;height:1px;background:rgba(255,255,255,0.2);margin-bottom:32px;"></div>
+      <div style="font-family:var(--font-sans);font-size:15px;font-weight:300;color:rgba(255,255,255,0.5);letter-spacing:0.03em;margin-bottom:10px;">Ujjwal Gupta &nbsp;·&nbsp; Itay Kadosh &nbsp;·&nbsp; Natalia Sekulic</div>
+      <div style="font-family:var(--font-sans);font-size:12px;font-weight:300;color:rgba(255,255,255,0.25);letter-spacing:0.08em;font-style:italic;">April 2026</div>
+    </div>
+  </div>
+  <aside style="display:none;">Good morning. We're Ujjwal, Itay, and Natalia — and over the next seven minutes we'll walk you through a risk-prediction system for American's crew sequences at DFW.</aside>
+</div>
+
+<!-- ══════════════════════════════════════
+     2 · THE PROBLEM
+══════════════════════════════════════ -->
+<div class="slide" data-screen-label="02 Problem" style="background:var(--white);">
+  <div class="slide-inner">
+    <div class="eyebrow">The Problem</div>
+    <div style="display:grid;grid-template-columns:1fr 1.35fr;gap:44px;flex:1;">
+
+      <!-- Left: pillars -->
+      <div style="display:flex;flex-direction:column;gap:0;">
+        <div style="padding-bottom:18px;border-bottom:1px solid var(--grey);">
+          <div class="caption" style="margin-bottom:6px;color:var(--blue2);">Crew Sequence</div>
+          <div class="h3" style="margin-bottom:7px;">One tail. Two flights. One failure point.</div>
+          <div class="body">Inbound A→DFW then DFW→B on the <em>same aircraft</em>, 30–240 min apart. One weather event disrupts the entire rotation.</div>
+        </div>
+        <div style="padding:18px 0;border-bottom:1px solid var(--grey);">
+          <div class="caption" style="margin-bottom:6px;color:var(--blue2);">Disruption Cost</div>
+          <div class="h3" style="margin-bottom:7px;">Weather + NAS: DFW's top cancel drivers.</div>
+          <div class="body" style="margin-bottom:10px;">Every cancelled rotation cascades — hotels, rebookings, misconnects, NPS hits.</div>
+          <div style="font-family:var(--font-serif);font-size:36px;letter-spacing:-0.05em;color:var(--red);">11.4%&thinsp;<span style="font-family:var(--font-sans);font-size:11px;letter-spacing:0.08em;text-transform:uppercase;color:var(--grey-dark);vertical-align:middle;">DFW disruption rate</span></div>
+        </div>
+        <div style="padding-top:18px;">
+          <div class="caption" style="margin-bottom:6px;color:var(--blue2);">The Gap</div>
+          <div class="h3" style="margin-bottom:7px;">Schedulers fly blind.</div>
+          <div class="body">Zero per-sequence risk signal. High-risk and low-risk rotations get identical treatment.</div>
+        </div>
+      </div>
+
+      <!-- Right: cascade diagram -->
+      <div style="display:flex;flex-direction:column;justify-content:center;border-left:1px solid var(--grey);padding-left:40px;">
+        <div class="caption" style="margin-bottom:18px;color:var(--blue2);">Disruption Cascade</div>
+        <svg viewBox="0 0 440 310" width="440" height="310" xmlns="http://www.w3.org/2000/svg" style="overflow:visible;">
+          <defs>
+            <marker id="a1" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#0d73b1"/></marker>
+            <marker id="a2" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#c7d0d7"/></marker>
+          </defs>
+          <!-- Origin -->
+          <circle cx="60" cy="76" r="28" fill="none" stroke="#0d73b1" stroke-width="1.5"/>
+          <text x="60" y="71" text-anchor="middle" font-family="'Inter',sans-serif" font-size="12" font-weight="500" fill="#0d73b1">Origin</text>
+          <text x="60" y="87" text-anchor="middle" font-family="'Inter',sans-serif" font-size="11" font-weight="300" fill="#8a9aa6">A</text>
+          <!-- DFW hub -->
+          <circle cx="220" cy="76" r="34" fill="#0d73b1"/>
+          <text x="220" y="71" text-anchor="middle" font-family="'Inter',sans-serif" font-size="13" font-weight="500" fill="#fff">DFW</text>
+          <text x="220" y="87" text-anchor="middle" font-family="'Inter',sans-serif" font-size="10" font-weight="300" fill="rgba(255,255,255,0.55)">Hub</text>
+          <!-- Dest -->
+          <circle cx="380" cy="76" r="28" fill="none" stroke="#c7d0d7" stroke-width="1.5"/>
+          <text x="380" y="71" text-anchor="middle" font-family="'Inter',sans-serif" font-size="12" font-weight="500" fill="#8a9aa6">Dest</text>
+          <text x="380" y="87" text-anchor="middle" font-family="'Inter',sans-serif" font-size="11" font-weight="300" fill="#c7d0d7">B</text>
+          <!-- Inbound arrow -->
+          <path d="M88,66 Q154,38 186,64" fill="none" stroke="#0d73b1" stroke-width="1.5" marker-end="url(#a1)"/>
+          <text x="140" y="40" text-anchor="middle" font-family="'Inter',sans-serif" font-size="10" fill="#0d73b1">Inbound ✈</text>
+          <!-- Outbound arrow (disrupted, dashed) -->
+          <path d="M254,64 Q316,38 352,64" fill="none" stroke="#c7d0d7" stroke-width="1.5" stroke-dasharray="5,4" marker-end="url(#a2)"/>
+          <text x="308" y="40" text-anchor="middle" font-family="'Inter',sans-serif" font-size="10" fill="#c7d0d7">Disrupted ✈</text>
+          <!-- Pulse ring on DFW -->
+          <circle cx="220" cy="76" r="48" fill="none" stroke="rgba(182,31,35,0.12)" stroke-width="6"/>
+          <!-- Tail label -->
+          <rect x="128" y="96" width="184" height="26" fill="none" stroke="rgba(13,115,177,0.15)" stroke-width="1"/>
+          <text x="220" y="113" text-anchor="middle" font-family="'Inter',sans-serif" font-size="10" fill="#8a9aa6" letter-spacing="0.03em">same Tail_Number · same FlightDate</text>
+          <!-- Drop line -->
+          <line x1="220" y1="122" x2="220" y2="152" stroke="var(--grey)" stroke-width="1"/>
+          <!-- Cascade boxes -->
+          <rect x="28" y="156" width="110" height="42" fill="none" stroke="var(--grey)" stroke-width="1"/>
+          <text x="83" y="174" text-anchor="middle" font-family="'Inter',sans-serif" font-size="11" font-weight="500" fill="#0d73b1">Hotel costs</text>
+          <text x="83" y="190" text-anchor="middle" font-family="'Inter',sans-serif" font-size="10" font-weight="300" fill="#8a9aa6">stranded crew</text>
+          <rect x="165" y="156" width="110" height="42" fill="none" stroke="var(--grey)" stroke-width="1"/>
+          <text x="220" y="174" text-anchor="middle" font-family="'Inter',sans-serif" font-size="11" font-weight="500" fill="#0d73b1">Rebooking</text>
+          <text x="220" y="190" text-anchor="middle" font-family="'Inter',sans-serif" font-size="10" font-weight="300" fill="#8a9aa6">downstream pax</text>
+          <rect x="302" y="156" width="110" height="42" fill="none" stroke="var(--grey)" stroke-width="1"/>
+          <text x="357" y="174" text-anchor="middle" font-family="'Inter',sans-serif" font-size="11" font-weight="500" fill="#0d73b1">NPS impact</text>
+          <text x="357" y="190" text-anchor="middle" font-family="'Inter',sans-serif" font-size="10" font-weight="300" fill="#8a9aa6">next-leg crews</text>
+          <!-- Lines to boxes -->
+          <line x1="162" y1="152" x2="83"  y2="156" stroke="var(--grey)" stroke-width="1"/>
+          <line x1="220" y1="152" x2="220" y2="156" stroke="var(--grey)" stroke-width="1"/>
+          <line x1="278" y1="152" x2="357" y2="156" stroke="var(--grey)" stroke-width="1"/>
+          <!-- Solution box -->
+          <rect x="92" y="222" width="256" height="50" fill="#0d73b1"/>
+          <text x="220" y="243" text-anchor="middle" font-family="'Instrument Serif',serif" font-size="14" font-style="italic" fill="rgba(255,255,255,0.6)">Our solution</text>
+          <text x="220" y="261" text-anchor="middle" font-family="'Inter',sans-serif" font-size="12" font-weight="400" letter-spacing="0.05em" fill="rgba(255,255,255,0.85)">Calibrated risk score per sequence</text>
+          <line x1="220" y1="200" x2="220" y2="222" stroke="var(--grey)" stroke-width="1"/>
+        </svg>
+      </div>
+    </div>
+  </div>
+  <aside style="display:none;">A crew sequence is one aircraft tail flying A→DFW then DFW→B. When weather hits the whole rotation cascades. We built a calibrated risk signal.</aside>
+</div>
+
+<!-- ══════════════════════════════════════
+     3 · PIPELINE
+══════════════════════════════════════ -->
+<div class="slide" data-screen-label="03 Pipeline" style="background:var(--off-white);">
+  <div class="slide-inner" style="justify-content:center;">
+    <div style="width:74%;margin:0 auto;">
+      <div class="eyebrow" style="text-align:center;">Methodology</div>
+      <div style="font-family:var(--font-serif);font-size:50px;letter-spacing:-0.05em;line-height:0.95;color:var(--blue);text-align:center;margin-bottom:48px;">Five-Step Pipeline</div>
+      <div style="display:flex;align-items:flex-start;margin-bottom:36px;">
+        <div class="pipe-step"><div class="pipe-num">01</div><div class="pipe-label">Data</div><div class="pipe-detail">BTS + NOAA<br>18M rows<br>2015–2024</div></div>
+        <div class="pipe-sep" style="margin-top:28px;"></div>
+        <div class="pipe-step"><div class="pipe-num">02</div><div class="pipe-label">Features</div><div class="pipe-detail">Tail-matching<br>70 features<br>8 groups</div></div>
+        <div class="pipe-sep" style="margin-top:28px;"></div>
+        <div class="pipe-step"><div class="pipe-num">03</div><div class="pipe-label">Model</div><div class="pipe-detail">XGBoost v7<br>Optuna tuning<br>time split</div></div>
+        <div class="pipe-sep" style="margin-top:28px;"></div>
+        <div class="pipe-step"><div class="pipe-num">04</div><div class="pipe-label">Results</div><div class="pipe-detail">AUC 0.825<br>Isotonic calib.<br>SHAP insights</div></div>
+        <div class="pipe-sep" style="margin-top:28px;"></div>
+        <div class="pipe-step"><div class="pipe-num">05</div><div class="pipe-label">Dashboard</div><div class="pipe-detail">Streamlit app<br>HuggingFace<br>Optimizer</div></div>
+      </div>
+      <div style="width:100%;height:1px;background:var(--grey);margin-bottom:20px;"></div>
+      <div style="font-family:var(--font-sans);font-size:14px;font-weight:300;color:var(--grey-dark);text-align:center;letter-spacing:-0.01em;font-style:italic;">BTS + NOAA → 70 features → XGBoost v7 → AUC 0.825 → live Streamlit app</div>
+    </div>
+  </div>
+  <aside style="display:none;">Here's the roadmap: data, features, model, evaluation, and a live dashboard.</aside>
+</div>
+
+<!-- ══════════════════════════════════════
+     4 · DATA SOURCES
+══════════════════════════════════════ -->
+<div class="slide" data-screen-label="04 Data" style="background:var(--white);">
+  <div class="slide-inner">
+    <div class="eyebrow">Data Sources &amp; Sequence Construction</div>
+    <div class="two-col">
+      <!-- Left -->
+      <div style="display:flex;flex-direction:column;gap:28px;">
+        <div>
+          <div class="caption" style="margin-bottom: 10px; color: var(--blue2); font-family: Inter">Source 1 — BTS On-Time Performance</div>
+          <div class="kv"><span class="kv-k">Years</span><span class="kv-v">2015–2024 (COVID 2020–21 excluded)</span></div>
+          <div class="kv"><span class="kv-k">Carriers</span><span class="kv-v">All carriers, DFW-filtered</span></div>
+          <div class="kv"><span class="kv-k">Records</span><span class="kv-v">~18M flight-level rows</span></div>
+          <div class="kv"><span class="kv-k">Fields</span><span class="kv-v">WeatherDelay, ArrDelay, Tail_Number, CancellationCode, NASDelay</span></div>
+          <div style="font-size:11px;color:var(--grey-dark);font-style:italic;margin-top:7px;">Ground truth for delays, cancellations, reason codes.</div>
+        </div>
+        <div style="padding-top:22px;border-top:1px solid var(--grey);">
+          <div class="caption" style="margin-bottom:10px;color:var(--blue2);">Source 2 — NOAA Global Summary of Month</div>
+          <div class="kv"><span class="kv-k">Coverage</span><span class="kv-v">All airports with CDO stations</span></div>
+          <div class="kv"><span class="kv-k">Gap</span><span class="kv-v">55% of airports have no station → median imputation</span></div>
+          <div class="kv"><span class="kv-k">Features</span><span class="kv-v">avg_wind_speed, precip_days, extreme_precip, max_wind_gust</span></div>
+          <div style="font-size:11px;color:var(--grey-dark);font-style:italic;margin-top:7px;">Cached — no API call at runtime.</div>
+        </div>
+      </div>
+      <!-- Right: tail-matching SVG -->
+      <div style="display:flex;flex-direction:column;gap:14px;border-left:1px solid var(--grey);padding-left:44px;">
+        <div class="caption" style="color:var(--blue2);">Why Tail-Matching Matters</div>
+        <svg viewBox="0 0 420 330" width="420" height="330" xmlns="http://www.w3.org/2000/svg" style="overflow: visible; width: 420px; height: 330px">
+          <defs>
+            <marker id="b1" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#c7d0d7"/></marker>
+            <marker id="b2" markerWidth="7" markerHeight="7" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L7,3 z" fill="#0d73b1"/></marker>
+          </defs>
+          <!-- WRONG: corridor-day -->
+          <text x="0" y="16" font-family="'Inter',sans-serif" font-size="10" font-weight="500" letter-spacing="0.1em" fill="#c7d0d7">✗  CORRIDOR-DAY  (wrong)</text>
+          <rect x="0" y="24" width="175" height="38" fill="none" stroke="#c7d0d7" stroke-width="1" stroke-dasharray="4,3"/>
+          <text x="87" y="39" text-anchor="middle" font-family="'Inter',sans-serif" font-size="12" fill="#c7d0d7">MCO → LAX · June</text>
+          <text x="87" y="54" text-anchor="middle" font-family="'Inter',sans-serif" font-size="10" font-weight="300" fill="#c7d0d7">all flights bundled</text>
+          <line x1="175" y1="43" x2="216" y2="43" stroke="#c7d0d7" stroke-width="1" marker-end="url(#b1)"/>
+          <text x="225" y="48" font-family="'Instrument Serif',serif" font-size="18" fill="#b61f23" font-style="italic">87% risk</text>
+          <!-- Divider -->
+          <line x1="0" y1="78" x2="420" y2="78" stroke="var(--grey)" stroke-width="1"/>
+          <!-- CORRECT: tail-matching -->
+          <text x="0" y="96" font-family="'Inter',sans-serif" font-size="10" font-weight="500" letter-spacing="0.1em" fill="#0d73b1">✓  TAIL-MATCHING  (ours)</text>
+          <!-- Inbound box -->
+          <rect x="0" y="104" width="138" height="50" fill="none" stroke="#0d73b1" stroke-width="1.5"/>
+          <text x="69" y="123" text-anchor="middle" font-family="'Inter',sans-serif" font-size="12" font-weight="500" fill="#0d73b1">✈  Inbound</text>
+          <text x="69" y="138" text-anchor="middle" font-family="'Inter',sans-serif" font-size="11" font-weight="300" fill="#4a5e6e">MCO → DFW</text>
+          <text x="69" y="151" text-anchor="middle" font-family="'Inter',sans-serif" font-size="9" fill="#8a9aa6">Tail: N924AA</text>
+          <!-- Arrow -->
+          <line x1="138" y1="129" x2="195" y2="129" stroke="var(--grey)" stroke-width="1" stroke-dasharray="3,3"/>
+          <text x="166" y="121" text-anchor="middle" font-family="'Inter',sans-serif" font-size="9" fill="#8a9aa6">78 min</text>
+          <!-- Outbound box -->
+          <rect x="195" y="104" width="138" height="50" fill="none" stroke="#0d73b1" stroke-width="1.5"/>
+          <text x="264" y="123" text-anchor="middle" font-family="'Inter',sans-serif" font-size="12" font-weight="500" fill="#0d73b1">✈  Outbound</text>
+          <text x="264" y="138" text-anchor="middle" font-family="'Inter',sans-serif" font-size="11" font-weight="300" fill="#4a5e6e">DFW → LAX</text>
+          <text x="264" y="151" text-anchor="middle" font-family="'Inter',sans-serif" font-size="9" fill="#8a9aa6">Tail: N924AA</text>
+          <!-- Join lines -->
+          <line x1="69"  y1="154" x2="69"  y2="180" stroke="var(--grey)" stroke-width="1"/>
+          <line x1="264" y1="154" x2="264" y2="180" stroke="var(--grey)" stroke-width="1"/>
+          <line x1="69"  y1="180" x2="264" y2="180" stroke="var(--grey)" stroke-width="1"/>
+          <line x1="166" y1="180" x2="166" y2="196" stroke="var(--grey)" stroke-width="1" marker-end="url(#b2)"/>
+          <!-- Result -->
+          <rect x="78" y="198" width="176" height="42" fill="#0d73b1"/>
+          <text x="166" y="216" text-anchor="middle" font-family="'Inter',sans-serif" font-size="11" font-weight="500" letter-spacing="0.08em" fill="rgba(255,255,255,0.8)">ONE SEQUENCE</text>
+          <text x="166" y="232" text-anchor="middle" font-family="'Instrument Serif',serif" font-size="13" font-style="italic" fill="rgba(255,255,255,0.45)">honest label</text>
+          <!-- Stats -->
+          <text x="0" y="268" font-family="'Instrument Serif',serif" font-size="30" letter-spacing="-0.04em" fill="#0d73b1">398K</text>
+          <text x="0" y="284" font-family="'Inter',sans-serif" font-size="9" font-weight="300" letter-spacing="0.1em" text-transform="uppercase" fill="#8a9aa6">ROTATIONS</text>
+          <text x="165" y="268" font-family="'Instrument Serif',serif" font-size="24" letter-spacing="-0.04em" fill="#b61f23">12%</text>
+          <text x="202" y="268" font-family="'Instrument Serif',serif" font-size="18" fill="#c7d0d7"> vs 87%</text>
+          <text x="165" y="284" font-family="'Inter',sans-serif" font-size="9" font-weight="300" letter-spacing="0.08em" fill="#8a9aa6">TAIL vs CORRIDOR · MCO→LAX</text>
+        </svg>
+      </div>
+    </div>
+  </div>
+  <aside style="display:none;">Two sources. Tail-matching is what makes labels honest.</aside>
+</div>
+
+<!-- ══════════════════════════════════════
+     5 · MODELING
+══════════════════════════════════════ -->
+<div class="slide" data-screen-label="05 Modeling" style="background:#07192e;">
+  <div class="slide-inner">
+    <div class="eyebrow" style="color:var(--blue2);">Feature Engineering · Model · Calibration</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:40px;flex:1;">
+      <!-- Left -->
+      <div style="display:flex;flex-direction:column;gap:14px;">
+        <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:5px;">
+          <div class="fpill" style="border-color:rgba(20,172,220,0.2);color:rgba(255,255,255,0.7);background:rgba(20,172,220,0.05);"><span>Origin BTS</span><span class="fpill-count">8</span></div>
+          <div class="fpill" style="border-color:rgba(20,172,220,0.2);color:rgba(255,255,255,0.7);background:rgba(20,172,220,0.05);"><span>Dest BTS</span><span class="fpill-count">8</span></div>
+          <div class="fpill" style="border-color:rgba(20,172,220,0.2);color:rgba(255,255,255,0.7);background:rgba(20,172,220,0.05);"><span>Pair BTS</span><span class="fpill-count">6</span></div>
+          <div class="fpill" style="border-color:rgba(20,172,220,0.2);color:rgba(255,255,255,0.7);background:rgba(20,172,220,0.05);"><span>Temporal</span><span class="fpill-count">6</span></div>
+          <div class="fpill" style="border-color:rgba(20,172,220,0.2);color:rgba(255,255,255,0.7);background:rgba(20,172,220,0.05);"><span>GSOM</span><span class="fpill-count">15</span></div>
+          <div class="fpill" style="border-color:rgba(20,172,220,0.2);color:rgba(255,255,255,0.7);background:rgba(20,172,220,0.05);"><span>Tail-Chain</span><span class="fpill-count">13</span></div>
+          <div class="fpill" style="border-color:rgba(20,172,220,0.2);color:rgba(255,255,255,0.7);background:rgba(20,172,220,0.05);"><span>Airport Cascade</span><span class="fpill-count">6</span></div>
+          <div class="fpill" style="border-color:rgba(20,172,220,0.2);color:rgba(255,255,255,0.7);background:rgba(20,172,220,0.05);"><span>Multi-Hop DFW</span><span class="fpill-count">8</span></div>
+        </div>
+        <div style="display:flex;justify-content:space-between;align-items:center;">
+          <div style="font-family:var(--font-sans);font-size:10px;color:rgba(255,255,255,0.2);font-style:italic;">★ 55% airports lack GSOM → median imputation</div>
+          <div style="font-family:var(--font-serif);font-size:20px;letter-spacing:-0.04em;color:var(--blue2);">= 70</div>
+        </div>
+        <div style="height:1px;background:rgba(255,255,255,0.07);"></div>
+        <div class="caption" style="color:rgba(255,255,255,0.2);">Model Spec</div>
+        <div class="kv kv-dark"><span class="kv-k">Model</span><span class="kv-v">XGBoost v7</span></div>
+        <div class="kv kv-dark"><span class="kv-k">Rows</span><span class="kv-v">398,098 · train &lt;2024 · val = 2024</span></div>
+        <div class="kv kv-dark"><span class="kv-k">Imbalance</span><span class="kv-v">scale_pos_weight = 7.73 (11.4% base rate)</span></div>
+        <div class="kv kv-dark"><span class="kv-k">Tuning</span><span class="kv-v">Optuna hyperparameter search</span></div>
+      </div>
+      <!-- Right: calibration scatter -->
+      <div style="display:flex;flex-direction:column;gap:12px;border-left:1px solid rgba(255,255,255,0.06);padding-left:32px;">
+        <div class="caption" style="color:rgba(255,255,255,0.2);">Isotonic Calibration — Predicted vs Observed</div>
+        <svg viewBox="0 0 340 255" width="340" height="255" xmlns="http://www.w3.org/2000/svg">
+          <defs><marker id="cx" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto"><path d="M0,0 L0,6 L6,3 z" fill="rgba(255,255,255,0.15)"/></marker></defs>
+          <line x1="40" y1="215" x2="325" y2="215" stroke="rgba(255,255,255,0.1)" stroke-width="1" marker-end="url(#cx)"/>
+          <line x1="40" y1="215" x2="40" y2="10"  stroke="rgba(255,255,255,0.1)" stroke-width="1" marker-end="url(#cx)"/>
+          <text x="182" y="232" text-anchor="middle" font-family="'Inter',sans-serif" font-size="9" fill="rgba(255,255,255,0.2)">Predicted Score</text>
+          <text x="14" y="118" text-anchor="middle" font-family="'Inter',sans-serif" font-size="9" fill="rgba(255,255,255,0.2)" transform="rotate(-90,14,118)">Observed Rate</text>
+          <!-- Ideal line -->
+          <line x1="40" y1="215" x2="310" y2="28" stroke="rgba(255,255,255,0.06)" stroke-width="1" stroke-dasharray="4,4"/>
+          <!-- Points + line -->
+          <polyline points="55,203 70,191 87,180 104,166 124,152 149,135 178,116 211,91 251,62 305,26" fill="none" stroke="var(--blue2)" stroke-width="1.5" opacity="0.7"/>
+          <circle cx="55"  cy="203" r="4" fill="var(--blue2)" opacity="0.85"/>
+          <circle cx="70"  cy="191" r="4" fill="var(--blue2)" opacity="0.85"/>
+          <circle cx="87"  cy="180" r="4" fill="var(--blue2)" opacity="0.85"/>
+          <circle cx="104" cy="166" r="4" fill="var(--blue2)" opacity="0.85"/>
+          <circle cx="124" cy="152" r="4" fill="var(--blue2)" opacity="0.85"/>
+          <circle cx="149" cy="135" r="4" fill="var(--blue2)" opacity="0.85"/>
+          <circle cx="178" cy="116" r="4" fill="var(--blue2)" opacity="0.85"/>
+          <circle cx="211" cy="91"  r="4" fill="var(--blue2)" opacity="0.85"/>
+          <circle cx="251" cy="62"  r="4" fill="var(--blue2)" opacity="0.85"/>
+          <circle cx="305" cy="26"  r="5" fill="var(--blue)" opacity="1"/>
+          <!-- AUC badge -->
+          <rect x="188" y="148" width="128" height="44" fill="rgba(13,115,177,0.15)" stroke="rgba(13,115,177,0.3)" stroke-width="1"/>
+          <text x="252" y="167" text-anchor="middle" font-family="'Inter',sans-serif" font-size="12" font-weight="500" fill="var(--blue2)">AUC  0.825</text>
+          <text x="252" y="184" text-anchor="middle" font-family="'Inter',sans-serif" font-size="10" font-weight="300" fill="rgba(255,255,255,0.3)">MCO→LAX: 9.7% → 11.6%</text>
+        </svg>
+        <div style="font-family:var(--font-sans);font-size:12px;font-weight:300;color:rgba(255,255,255,0.25);line-height:1.7;">
+          Raw log-odds → IsotonicRegression<br>
+          (309 breakpoints, √n weight)<br>
+          <span style="color:var(--blue2);">Score = observed disruption rate</span>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside style="display:none;">Feature groups, XGBoost, isotonic calibration — score equals the observed disruption rate.</aside>
+</div>
+
+<!-- ══════════════════════════════════════
+     6 · RESULTS
+══════════════════════════════════════ -->
+<div class="slide" data-screen-label="06 Results" style="background:var(--white);">
+  <div class="slide-inner">
+    <div class="eyebrow">Model Performance</div>
+    <!-- Stat row -->
+    <div style="display:flex;gap:36px;margin-bottom:24px;padding-bottom:20px;border-bottom:1px solid var(--grey);">
+      <div class="sc accent"><div class="stat-num" style="color:var(--red);">0.825</div><div class="stat-lbl">Val AUC · 2024</div></div>
+      <div class="sc"><div class="stat-num">0.445</div><div class="stat-lbl">Val AP · 2024</div></div>
+      <div class="sc"><div class="stat-num">0.803</div><div class="stat-lbl">Pair AUC · routes</div></div>
+      <div class="sc"><div class="stat-num">11.4%</div><div class="stat-lbl">Base Rate</div></div>
+    </div>
+    <!-- Chart + SHAP -->
+    <div style="display:grid;grid-template-columns:56% 44%;gap:36px;flex:1;min-height:0;">
+      <!-- SVG bar chart -->
+      <div>
+        <div class="caption" style="margin-bottom:12px;color:var(--blue2);">Calibration by Decile — Predicted vs Observed</div>
+        <svg viewBox="0 0 460 195" width="460" height="195" xmlns="http://www.w3.org/2000/svg">
+          <line x1="36" y1="10"  x2="450" y2="10"  stroke="rgba(0,0,0,0.04)" stroke-width="1"/>
+          <line x1="36" y1="55"  x2="450" y2="55"  stroke="rgba(0,0,0,0.04)" stroke-width="1"/>
+          <line x1="36" y1="100" x2="450" y2="100" stroke="rgba(0,0,0,0.04)" stroke-width="1"/>
+          <line x1="36" y1="155" x2="450" y2="155" stroke="rgba(0,0,0,0.04)" stroke-width="1"/>
+          <text x="32" y="14"  text-anchor="end" font-family="'Inter',sans-serif" font-size="9" fill="#c7d0d7">40%</text>
+          <text x="32" y="59"  text-anchor="end" font-family="'Inter',sans-serif" font-size="9" fill="#c7d0d7">25%</text>
+          <text x="32" y="104" text-anchor="end" font-family="'Inter',sans-serif" font-size="9" fill="#c7d0d7">13%</text>
+          <text x="32" y="159" text-anchor="end" font-family="'Inter',sans-serif" font-size="9" fill="#c7d0d7">0%</text>
+          <line x1="36" y1="155" x2="450" y2="155" stroke="var(--grey)" stroke-width="1"/>
+          <!-- D1 -->  <rect x="42"  y="147" width="14" height="8"  fill="#0d73b1"/><rect x="58"  y="146" width="14" height="9"  fill="#14acdc" opacity="0.7"/>
+          <!-- D2 -->  <rect x="84"  y="138" width="14" height="17" fill="#0d73b1"/><rect x="100" y="136" width="14" height="19" fill="#14acdc" opacity="0.7"/>
+          <!-- D3 -->  <rect x="126" y="129" width="14" height="26" fill="#0d73b1"/><rect x="142" y="127" width="14" height="28" fill="#14acdc" opacity="0.7"/>
+          <!-- D4 -->  <rect x="168" y="119" width="14" height="36" fill="#0d73b1"/><rect x="184" y="117" width="14" height="38" fill="#14acdc" opacity="0.7"/>
+          <!-- D5 -->  <rect x="210" y="108" width="14" height="47" fill="#0d73b1"/><rect x="226" y="105" width="14" height="50" fill="#14acdc" opacity="0.7"/>
+          <!-- D6 -->  <rect x="252" y="95"  width="14" height="60" fill="#0d73b1"/><rect x="268" y="92"  width="14" height="63" fill="#14acdc" opacity="0.7"/>
+          <!-- D7 -->  <rect x="294" y="78"  width="14" height="77" fill="#0d73b1"/><rect x="310" y="77"  width="14" height="78" fill="#14acdc" opacity="0.7"/>
+          <!-- D8 -->  <rect x="336" y="60"  width="14" height="95" fill="#0d73b1"/><rect x="352" y="59"  width="14" height="96" fill="#14acdc" opacity="0.7"/>
+          <!-- D9 -->  <rect x="378" y="38"  width="14" height="117" fill="#0d73b1"/><rect x="394" y="36" width="14" height="119" fill="#14acdc" opacity="0.7"/>
+          <!-- D10 --> <rect x="420" y="5"   width="14" height="150" fill="#b61f23"/><rect x="436" y="8"  width="14" height="147" fill="#14acdc" opacity="0.7"/>
+          <!-- X labels -->
+          <text x="57"  y="168" text-anchor="middle" font-family="'Inter',sans-serif" font-size="9" fill="#c7d0d7">D1</text>
+          <text x="99"  y="168" text-anchor="middle" font-family="'Inter',sans-serif" font-size="9" fill="#c7d0d7">D2</text>
+          <text x="141" y="168" text-anchor="middle" font-family="'Inter',sans-serif" font-size="9" fill="#c7d0d7">D3</text>
+          <text x="183" y="168" text-anchor="middle" font-family="'Inter',sans-serif" font-size="9" fill="#c7d0d7">D4</text>
+          <text x="225" y="168" text-anchor="middle" font-family="'Inter',sans-serif" font-size="9" fill="#c7d0d7">D5</text>
+          <text x="267" y="168" text-anchor="middle" font-family="'Inter',sans-serif" font-size="9" fill="#c7d0d7">D6</text>
+          <text x="309" y="168" text-anchor="middle" font-family="'Inter',sans-serif" font-size="9" fill="#c7d0d7">D7</text>
+          <text x="351" y="168" text-anchor="middle" font-family="'Inter',sans-serif" font-size="9" fill="#c7d0d7">D8</text>
+          <text x="393" y="168" text-anchor="middle" font-family="'Inter',sans-serif" font-size="9" fill="#c7d0d7">D9</text>
+          <text x="435" y="168" text-anchor="middle" font-family="'Inter',sans-serif" font-size="9" fill="#b61f23">D10</text>
+          <!-- Legend -->
+          <rect x="36"  y="178" width="10" height="10" fill="#0d73b1"/>
+          <text x="50"  y="187" font-family="'Inter',sans-serif" font-size="10" fill="#4a5e6e">Predicted</text>
+          <rect x="112" y="178" width="10" height="10" fill="#14acdc" opacity="0.7"/>
+          <text x="126" y="187" font-family="'Inter',sans-serif" font-size="10" fill="#4a5e6e">Observed</text>
+        </svg>
+      </div>
+      <!-- SHAP -->
+      <div style="border-left:1px solid var(--grey);padding-left:28px;display:flex;flex-direction:column;justify-content:center;">
+        <div class="caption" style="margin-bottom:14px;color:var(--blue2);">Top Risk Drivers (SHAP)</div>
+        <div class="shap-row"><span class="shap-lbl">pair_weather_max</span><div class="shap-track"><div class="shap-fill" style="width:100%;background:var(--red);"></div></div><span style="font-family:var(--font-sans);font-size:9px;color:var(--grey-dark);min-width:26px;text-align:right;">1.00</span></div>
+        <div class="shap-row"><span class="shap-lbl">DFW hub delay rate</span><div class="shap-track"><div class="shap-fill" style="width:78%;"></div></div><span style="font-family:var(--font-sans);font-size:9px;color:var(--grey-dark);min-width:26px;text-align:right;">0.78</span></div>
+        <div class="shap-row"><span class="shap-lbl">origin extreme precip</span><div class="shap-track"><div class="shap-fill" style="width:62%;"></div></div><span style="font-family:var(--font-sans);font-size:9px;color:var(--grey-dark);min-width:26px;text-align:right;">0.62</span></div>
+        <div class="shap-row"><span class="shap-lbl">cascade_amplification</span><div class="shap-track"><div class="shap-fill" style="width:52%;"></div></div><span style="font-family:var(--font-sans);font-size:9px;color:var(--grey-dark);min-width:26px;text-align:right;">0.52</span></div>
+        <div class="shap-row"><span class="shap-lbl">dest avg_wind_speed</span><div class="shap-track"><div class="shap-fill" style="width:44%;"></div></div><span style="font-family:var(--font-sans);font-size:9px;color:var(--grey-dark);min-width:26px;text-align:right;">0.44</span></div>
+        <div class="shap-row"><span class="shap-lbl">fdp_util</span><div class="shap-track"><div class="shap-fill" style="width:34%;"></div></div><span style="font-family:var(--font-sans);font-size:9px;color:var(--grey-dark);min-width:26px;text-align:right;">0.34</span></div>
+        <div style="font-size:10px;color:var(--grey-dark);font-style:italic;margin-top:12px;line-height:1.55;">Storm replay passed — score spikes align<br>with known DFW storm days.</div>
+      </div>
+    </div>
+  </div>
+  <aside style="display:none;">Headline metrics on strict 2024 holdout. Calibration tracks 1:1 across deciles.</aside>
+</div>
+
+<!-- ══════════════════════════════════════
+     7 · DEMO
+══════════════════════════════════════ -->
+<div class="slide" data-screen-label="07 Demo" style="background:#07192e;">
+  <div class="slide-inner" style="justify-content:center;">
+    <div style="display:grid;grid-template-columns:50% 50%;gap:52px;align-items:center;">
+      <div>
+        <div class="eyebrow" style="color:var(--blue2);">Live Streamlit App · HuggingFace Spaces</div>
+        <div style="font-family:var(--font-serif);font-size:100px;letter-spacing:-0.06em;line-height:0.88;color:var(--white);margin-bottom:24px;">Demo</div>
+        <div style="font-family:var(--font-sans);font-size:13px;font-weight:300;color:rgba(255,255,255,0.25);margin-bottom:32px;font-style:italic;">huggingface.co/spaces/itaykadosh/AA-EPPS-Data-Challenge</div>
+        <div style="display:flex;gap:10px;flex-wrap:wrap;">
+          <span style="font-family:var(--font-sans);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--blue2);border:1px solid rgba(20,172,220,0.3);padding:5px 12px;">Heatmap</span>
+          <span style="font-family:var(--font-sans);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--blue2);border:1px solid rgba(20,172,220,0.3);padding:5px 12px;">Map</span>
+          <span style="font-family:var(--font-sans);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--blue2);border:1px solid rgba(20,172,220,0.3);padding:5px 12px;">Query</span>
+          <span style="font-family:var(--font-sans);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--blue2);border:1px solid rgba(20,172,220,0.3);padding:5px 12px;">Timeline</span>
+          <span style="font-family:var(--font-sans);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--blue2);border:1px solid rgba(20,172,220,0.3);padding:5px 12px;">Optimizer</span>
+          <span style="font-family:var(--font-sans);font-size:10px;letter-spacing:0.1em;text-transform:uppercase;color:var(--blue2);border:1px solid rgba(20,172,220,0.3);padding:5px 12px;">Methodology</span>
+        </div>
+      </div>
+      <div style="border-left:1px solid rgba(255,255,255,0.06);padding-left:40px;">
+        <div class="caption" style="color:rgba(255,255,255,0.2);margin-bottom:20px;">90-sec Walk-Through</div>
+        <div style="display:flex;flex-direction:column;gap:16px;">
+          <div style="display:flex;gap:14px;"><span style="font-family:var(--font-sans);font-size:12px;font-weight:500;color:var(--blue2);min-width:44px;">
+</span><div><span style="font-family:var(--font-sans);font-size:13px;font-weight:500;color:rgba(255,255,255,0.6);display:block;margin-bottom:3px;">
+</span><span style="font-family:var(--font-sans);font-size:12px;font-weight:300;color:rgba(255,255,255,0.22);"></span></div></div>
+          <div style="display:flex;gap:14px;"><span style="font-family:var(--font-sans);font-size:12px;font-weight:500;color:var(--blue2);min-width:44px;">
+</span><div><span style="font-family:var(--font-sans);font-size:13px;font-weight:500;color:rgba(255,255,255,0.6);display:block;margin-bottom:3px;">
+</span><span style="font-family:var(--font-sans);font-size:12px;font-weight:300;color:rgba(255,255,255,0.22);"></span></div></div>
+          <div style="display:flex;gap:14px;"><span style="font-family:var(--font-sans);font-size:12px;font-weight:500;color:var(--blue2);min-width:44px;">
+</span><div><span style="font-family:var(--font-sans);font-size:13px;font-weight:500;color:rgba(255,255,255,0.6);display:block;margin-bottom:3px;">
+</span><span style="font-family:var(--font-sans);font-size:12px;font-weight:300;color:rgba(255,255,255,0.22);"></span></div></div>
+          <div style="display:flex;gap:14px;"><span style="font-family:var(--font-sans);font-size:12px;font-weight:500;color:var(--blue2);min-width:44px;">
+</span><div><span style="font-family:var(--font-sans);font-size:13px;font-weight:500;color:rgba(255,255,255,0.6);display:block;margin-bottom:3px;">
+</span><span style="font-family:var(--font-sans);font-size:12px;font-weight:300;color:rgba(255,255,255,0.22);"></span></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside style="display:none;">Switch to live app. Follow the walk-through card.</aside>
+</div>
+
+<!-- ══════════════════════════════════════
+     8 · Q&A
+══════════════════════════════════════ -->
+<div class="slide" data-screen-label="08 Q&A" style="background:#07192e;">
+  <div class="slide-inner" style="align-items:center;justify-content:center;">
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:80px;align-items:center;width:80%;">
+      <div>
+        <div style="font-family:var(--font-serif);font-size:96px;letter-spacing:-0.06em;line-height:0.88;color:var(--white);margin-bottom:32px;">Q&amp;A</div>
+        <div style="font-family:var(--font-sans);font-size:14px;font-weight:300;color:rgba(255,255,255,0.3);margin-bottom:22px;">Try it live — scan to open the dashboard.</div>
+        <div style="font-family:var(--font-sans);font-size:13px;font-weight:400;color:rgba(255,255,255,0.4);margin-bottom:8px;">Ujjwal Gupta &nbsp;·&nbsp; Itay Kadosh &nbsp;·&nbsp; Natalia Sekulic</div>
+        <div style="font-family:var(--font-sans);font-size:11px;font-weight:300;color:rgba(255,255,255,0.18);font-style:italic;">huggingface.co/spaces/itaykadosh/AA-EPPS-Data-Challenge</div>
+        <div style="display:flex;gap:12px;margin-top:32px;">
+          <div style="font-family:var(--font-sans);font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--blue2);border:1px solid rgba(20,172,220,0.25);padding:8px 16px;">AUC 0.825</div>
+          <div style="font-family:var(--font-sans);font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--blue2);border:1px solid rgba(20,172,220,0.25);padding:8px 16px;">398K sequences</div>
+          <div style="font-family:var(--font-sans);font-size:10px;font-weight:500;letter-spacing:0.1em;text-transform:uppercase;color:var(--blue2);border:1px solid rgba(20,172,220,0.25);padding:8px 16px;">70 features</div>
+        </div>
+      </div>
+      <div style="display:flex;justify-content:center;">
+        <div style="border:1px solid rgba(20,172,220,0.2);width:180px;height:180px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:10px;">
+          <div style="font-family:var(--font-sans);font-size:10px;font-weight:400;letter-spacing:0.12em;text-transform:uppercase;color:rgba(255,255,255,0.2);">QR Code</div>
+          <div style="font-family:var(--font-sans);font-size:11px;font-weight:300;color:rgba(255,255,255,0.12);text-align:center;">Scan for<br>live dashboard</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <aside style="display:none;">Open for questions.</aside>
+</div>
+
+</div><!-- /#stage -->
+
+<nav id="nav">
+  <button class="nav-btn" id="prev">← Prev</button>
+  <span class="nav-counter" id="counter">1 / 8</span>
+  <button class="nav-btn" id="next">Next →</button>
+</nav>
+
+<script>
+function scaleStage() {
+  const s = document.getElementById('stage');
+  const sc = Math.min(window.innerWidth / 1280, window.innerHeight / 720);
+  s.style.transform = 'scale(' + sc + ')';
+  s.style.left = ((window.innerWidth  - 1280 * sc) / 2) + 'px';
+  s.style.top  = ((window.innerHeight - 720  * sc) / 2) + 'px';
+}
+window.addEventListener('resize', scaleStage);
+scaleStage();
+
+const slides = document.querySelectorAll('.slide');
+const total  = slides.length;
+let cur = parseInt(localStorage.getItem('aa-epps-slide') || '0');
+
+function go(n) {
+  slides[cur].classList.remove('active');
+  cur = ((n % total) + total) % total;
+  slides[cur].classList.add('active');
+  document.getElementById('counter').textContent = (cur + 1) + ' / ' + total;
+  localStorage.setItem('aa-epps-slide', cur);
+}
+document.getElementById('prev').onclick = () => go(cur - 1);
+document.getElementById('next').onclick = () => go(cur + 1);
+document.addEventListener('keydown', e => {
+  if (e.key === 'ArrowRight' || e.key === 'ArrowDown') go(cur + 1);
+  if (e.key === 'ArrowLeft'  || e.key === 'ArrowUp')   go(cur - 1);
+});
+go(cur);
+</script>
+</body>
+</html>

@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body { background: #fff; padding: 28px 32px; font-family: 'Inter', sans-serif; }
+.row { display: flex; gap: 24px; align-items: center; flex-wrap: wrap; }
+.group { display: flex; flex-direction: column; gap: 8px; align-items: flex-start; }
+.label { font-size: 9px; letter-spacing: 0.1em; text-transform: uppercase; color: #A8A8A8; margin-bottom: 2px; }
+
+/* CTA button */
+.cta {
+  font-family: 'Inter', sans-serif;
+  font-size: 13px;
+  font-weight: 400;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #000;
+  background: none;
+  border: 1px solid #000;
+  padding: 12px 28px;
+  cursor: pointer;
+  border-radius: 0;
+  transition: opacity 0.6s cubic-bezier(0.16,1,0.3,1);
+}
+.cta:hover { opacity: 0.5; }
+.cta.dark { background: #000; color: #fff; border-color: #000; }
+.cta.dark:hover { opacity: 0.6; }
+.cta.ghost { color: #6F6F6F; border-color: #6F6F6F; }
+</style>
+</head>
+<body>
+  <div class="row">
+    <div class="group">
+      <div class="label">Primary</div>
+      <button class="cta">Begin Journey</button>
+    </div>
+    <div class="group">
+      <div class="label">Filled</div>
+      <button class="cta dark">Begin Journey</button>
+    </div>
+    <div class="group">
+      <div class="label">Ghost</div>
+      <button class="cta ghost">Learn more</button>
+    </div>
+  </div>
+  <div style="margin-top:16px; font-size:10px; color:#A8A8A8; font-style:italic;">Hover to preview — opacity transition, no color shift</div>
+</body>
+</html>
